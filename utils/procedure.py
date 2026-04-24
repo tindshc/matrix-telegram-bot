@@ -52,6 +52,22 @@ def _parse_markdown_document(content):
     return sections
 
 
+def _serialize_markdown_document(nodes):
+    """Render the parsed heading tree back to markdown text."""
+    lines = []
+
+    def walk(node_list):
+        for node in node_list:
+            lines.append(f"{'#' * node['level']} {node['title']}")
+            for line in node["body"]:
+                lines.append(line)
+            if node["children"]:
+                walk(node["children"])
+
+    walk(nodes)
+    return "\n".join(lines).rstrip() + ("\n" if lines else "")
+
+
 def count_procedure_sections(md_content):
     """Return the number of top-level `#` sections in a markdown document."""
     return len(_parse_markdown_document(md_content))
@@ -99,6 +115,23 @@ def _get_node_by_path(nodes, path):
     return node
 
 
+def _delete_node_by_path(nodes, path):
+    if not path:
+        return None
+
+    current_nodes = nodes
+    for index in path[:-1]:
+        if index < 1 or index > len(current_nodes):
+            return None
+        current_nodes = current_nodes[index - 1]["children"]
+
+    target_index = path[-1] - 1
+    if target_index < 0 or target_index >= len(current_nodes):
+        return None
+
+    return current_nodes.pop(target_index)
+
+
 def _collect_text(node):
     parts = [node["title"], " ".join(node["body"])]
     return " ".join(part for part in parts if part).strip()
@@ -134,9 +167,23 @@ def get_procedure_info(md_content):
     lines.append("")
     lines.append(
         "Dùng <b>tên_file hien</b>, <b>tên_file hien 1</b>, <b>tên_file tim ~...</b>, "
-        "<b>tên_file xem 1 1</b>, <b>tên_file xem 1 1 1</b>, hoặc <b>tên_file them &lt;file.md&gt;</b>."
+        "<b>tên_file xem 1 1</b>, <b>tên_file xem 1 1 1</b>, <b>tên_file xoa 2</b>, hoặc <b>tên_file them &lt;file.md&gt;</b>."
     )
     return "\n".join(lines)
+
+
+def delete_procedure_section(md_content, path):
+    """
+    Delete a section identified by a 1-based heading path.
+
+    Returns (updated_content, deleted_title) on success or (None, None) if
+    the path is invalid.
+    """
+    sections = _parse_markdown_document(md_content)
+    deleted = _delete_node_by_path(sections, path)
+    if deleted is None:
+        return None, None
+    return _serialize_markdown_document(sections), deleted["title"]
 
 
 def process_procedure_markdown(md_content, formula):
@@ -229,6 +276,6 @@ def process_procedure_markdown(md_content, formula):
 
     return (
         "❌ Lệnh không hợp lệ cho file Markdown. Dùng <b>hien</b>, <b>hien 1</b>, <b>tim ~...</b>, "
-        "<b>xem 1</b>, <b>xem 1 1</b>, <b>xem 1 1 1</b>, hoặc <b>them &lt;file.md&gt;</b>.",
+        "<b>xem 1</b>, <b>xem 1 1</b>, <b>xem 1 1 1</b>, <b>xoa 2</b>, hoặc <b>them &lt;file.md&gt;</b>.",
         None,
     )

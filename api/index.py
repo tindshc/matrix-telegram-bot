@@ -12,6 +12,7 @@ from utils.procedure import (
     process_procedure_markdown,
     merge_procedure_documents,
     count_procedure_sections,
+    delete_procedure_section,
 )
 from utils.db import db_set, db_get, db_list, db_delete
 from utils.db import db_set_kind, db_get_kind, db_delete_kind
@@ -97,6 +98,17 @@ async def handle_markdown_logic(user_id, fname, formula, message):
     formula = formula.strip()
     formula_lower = formula.lower()
 
+    def _parse_path(text):
+        parts = text.split()
+        if len(parts) < 2:
+            return None
+        path = []
+        for token in parts[1:]:
+            if not token.isdigit():
+                return None
+            path.append(int(token))
+        return path
+
     if formula_lower.startswith("them "):
         source_name = formula[5:].strip().lower()
         source_name = _normalize_markdown_name(source_name)
@@ -126,6 +138,7 @@ async def handle_markdown_logic(user_id, fname, formula, message):
         db_set(user_id, fname, sent_msg.document.file_id)
         db_set_kind(user_id, fname, "md")
         db_delete(user_id, source_name)
+        db_delete_kind(user_id, source_name)
 
         base_count = count_procedure_sections(content)
         extra_count = count_procedure_sections(source_content)
@@ -134,6 +147,38 @@ async def handle_markdown_logic(user_id, fname, formula, message):
             f"- Mục chính cũ: {base_count}\n"
             f"- Mục chính thêm: {extra_count}\n"
             f"- File nguồn `{source_name}` đã được xóa khỏi bộ nhớ.",
+            parse_mode='Markdown'
+        )
+        return True
+
+    if formula_lower.startswith("xoa "):
+        path = _parse_path(formula)
+        if path is None:
+            await message.reply_text(
+                "❌ Dùng đúng dạng <b>xoa 2</b> hoặc <b>xoa 2 1</b>.",
+                parse_mode='HTML',
+            )
+            return True
+
+        updated_content, deleted_title = delete_procedure_section(content, path)
+        if updated_content is None:
+            await message.reply_text("❌ Số mục không hợp lệ.", parse_mode='HTML')
+            return True
+
+        updated_file = io.BytesIO(updated_content.encode('utf-8'))
+        updated_file.name = f"{fname}.md"
+        sent_msg = await bot.send_document(
+            chat_id=message.chat_id,
+            document=updated_file,
+            caption=f"📂 Đã xóa mục {' '.join(map(str, path))} khỏi `{fname}`",
+            disable_notification=True
+        )
+
+        db_set(user_id, fname, sent_msg.document.file_id)
+        db_set_kind(user_id, fname, "md")
+
+        await message.reply_text(
+            f"✅ Đã xóa mục {' '.join(map(str, path))}: `{deleted_title}` khỏi `{fname}`.",
             parse_mode='Markdown'
         )
         return True
@@ -159,7 +204,7 @@ async def webhook_handler(request: Request):
             
             if query.data == 'mode_help':
                 await query.edit_message_text(
-                    "ℹ️ **Hướng dẫn tính năng**\n\n- Upload CSV để nạp file, ví dụ `bctk.csv`.\n- CSV dùng lệnh: `tên_file hien`, `tên_file tim ...`, `tên_file xem ...`, `tên_file xoa`.\n- Markdown dùng tên có chữ `md` trong tên, ví dụ `mdquytrinh.md` hoặc `luatmd.doc.md`.\n- Markdown dùng `tên_file hien` hoặc `tên_file hien 1` để xem mục lục, `tên_file xem 1 1` hoặc `tên_file xem 1 1 1` để xem chi tiết, `tên_file them file.md` để gộp file.\n- Lịch âm dương dùng `callicham 10/3/2026` hoặc `callicham am 10/3/2026`.\n- Quản lý file: `/list`, `/del <tên_file>`.\n\nVí dụ: `bctk tim 5~'hoacuong' and 1==2020`",
+                    "ℹ️ **Hướng dẫn tính năng**\n\n- Upload CSV để nạp file, ví dụ `bctk.csv`.\n- CSV dùng lệnh: `tên_file hien`, `tên_file tim ...`, `tên_file xem ...`, `tên_file xoa`.\n- Markdown dùng tên có chữ `md` trong tên, ví dụ `mdquytrinh.md` hoặc `luatmd.doc.md`.\n- Markdown dùng `tên_file hien` hoặc `tên_file hien 1` để xem mục lục, `tên_file xem 1 1` hoặc `tên_file xem 1 1 1` để xem chi tiết, `tên_file xoa 2` để xóa mục theo số thứ tự, `tên_file them file.md` để gộp file.\n- Lịch âm dương dùng `callicham 10/3/2026` hoặc `callicham am 10/3/2026`.\n- Quản lý file: `/list`, `/del <tên_file>`.\n\nVí dụ: `bctk tim 5~'hoacuong' and 1==2020`",
                     parse_mode='Markdown'
                 )
             elif query.data == 'mode_list':
