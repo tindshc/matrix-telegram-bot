@@ -9,14 +9,14 @@ def _escape_html(text):
 
 def _parse_markdown_document(content):
     """
-    Parse a markdown document into sections.
+    Parse a markdown document into a heading tree.
 
-    Level 1 headings (#) become top-level sections.
-    Level 2 headings (##) become subsections under the most recent section.
+    The parser keeps the full hierarchy of headings so callers can navigate
+    documents with up to 6 levels. For the current bot flow we mainly use
+    `#`, `##`, and `###`.
     """
     sections = []
-    current_section = None
-    current_subsection = None
+    stack = []
     heading_re = re.compile(r"^(#{1,6})\s+(.*)$")
 
     for raw_line in content.splitlines():
@@ -26,32 +26,28 @@ def _parse_markdown_document(content):
         if match:
             level = len(match.group(1))
             title = match.group(2).strip()
+            node = {
+                "title": title,
+                "level": level,
+                "body": [],
+                "children": [],
+            }
 
-            if level == 1:
-                current_section = {
-                    "title": title,
-                    "intro": [],
-                    "subsections": [],
-                }
-                sections.append(current_section)
-                current_subsection = None
-                continue
+            while stack and stack[-1]["level"] >= level:
+                stack.pop()
 
-            if level == 2 and current_section is not None:
-                current_subsection = {
-                    "title": title,
-                    "body": [],
-                }
-                current_section["subsections"].append(current_subsection)
-                continue
+            if stack:
+                stack[-1]["children"].append(node)
+            else:
+                sections.append(node)
 
-        if current_section is None:
+            stack.append(node)
             continue
 
-        if current_subsection is not None:
-            current_subsection["body"].append(line)
-        else:
-            current_section["intro"].append(line)
+        if not stack:
+            continue
+
+        stack[-1]["body"].append(line)
 
     return sections
 
@@ -88,34 +84,42 @@ def _normalize_bullet_line(line):
     return re.sub(r"^\s*[-*]\s*", "", str(line)).strip()
 
 
-def _render_section(section, index, subsection_index=None):
-    lines = [f"📄 <b>Mục {index}</b>: {_escape_html(section['title'])}"]
+def _format_path(path):
+    return " ".join(str(part) for part in path)
 
-    if subsection_index is None:
-        intro_lines = [line for line in section["intro"] if line.strip()]
-        if intro_lines:
-            lines.append("")
-            lines.append("<b>Nội dung chính:</b>")
-            for line in intro_lines:
-                lines.append(f"• {_escape_html(_normalize_bullet_line(line))}")
 
-        if section["subsections"]:
-            lines.append("")
-            lines.append("<b>Phần:</b>")
-            for i, sub in enumerate(section["subsections"], 1):
-                lines.append(f"{i}. {_escape_html(sub['title'])}")
-        return "\n".join(lines)
+def _get_node_by_path(nodes, path):
+    current_nodes = nodes
+    node = None
+    for index in path:
+        if index < 1 or index > len(current_nodes):
+            return None
+        node = current_nodes[index - 1]
+        current_nodes = node["children"]
+    return node
 
-    if subsection_index < 1 or subsection_index > len(section["subsections"]):
-        return None
 
-    subsection = section["subsections"][subsection_index - 1]
-    lines.append(f"<b>Phần {subsection_index}</b>: {_escape_html(subsection['title'])}")
-    body_lines = [line for line in subsection["body"] if line.strip()]
+def _collect_text(node):
+    parts = [node["title"], " ".join(node["body"])]
+    return " ".join(part for part in parts if part).strip()
+
+
+def _render_node(node, path):
+    lines = [f"📄 <b>Mục {_escape_html(_format_path(path))}</b>: {_escape_html(node['title'])}"]
+
+    body_lines = [line for line in node["body"] if line.strip()]
     if body_lines:
         lines.append("")
+        lines.append("<b>Nội dung:</b>")
         for line in body_lines:
             lines.append(f"• {_escape_html(_normalize_bullet_line(line))}")
+
+    if node["children"]:
+        lines.append("")
+        lines.append("<b>Mục con:</b>")
+        for i, child in enumerate(node["children"], 1):
+            child_path = path + [i]
+            lines.append(f"{_escape_html(_format_path(child_path))}. {_escape_html(child['title'])}")
     return "\n".join(lines)
 
 
@@ -128,7 +132,10 @@ def get_procedure_info(md_content):
     for i, section in enumerate(sections, 1):
         lines.append(f"{i}. {_escape_html(section['title'])}")
     lines.append("")
-    lines.append("Dùng <b>mdquytrinh hien</b>, <b>mdquytrinh tim ~...</b>, <b>mdquytrinh xem 1</b>, <b>mdquytrinh xem 3 1</b>, hoặc <b>mdquytrinh them &lt;file.md&gt;</b>.")
+    lines.append(
+        "Dùng <b>tên_file hien</b>, <b>tên_file hien 1</b>, <b>tên_file tim ~...</b>, "
+        "<b>tên_file xem 1 1</b>, <b>tên_file xem 1 1 1</b>, hoặc <b>tên_file them &lt;file.md&gt;</b>."
+    )
     return "\n".join(lines)
 
 
@@ -143,12 +150,46 @@ def process_procedure_markdown(md_content, formula):
     if not sections:
         return "❌ Không tìm thấy mục # nào trong file Markdown.", None
 
-    if formula_lower == "hien":
-        lines = ["📋 <b>Danh sách quy trình</b>:"]
-        for i, section in enumerate(sections, 1):
-            lines.append(f"{i}. {_escape_html(section['title'])}")
+    parts = formula.split()
+    command = parts[0].lower() if parts else ""
+
+    def _parse_path(tokens):
+        path = []
+        for token in tokens:
+            if not token.isdigit():
+                return None
+            path.append(int(token))
+        return path
+
+    if command in {"hien", "mucluc"}:
+        path = _parse_path(parts[1:])
+        if path is None:
+            return "❌ Dùng đúng dạng <b>hien</b>, <b>hien 1</b> hoặc <b>hien 1 1</b>.", None
+
+        if not path:
+            lines = ["📋 <b>Mục lục</b>:"]
+            for i, section in enumerate(sections, 1):
+                lines.append(f"{i}. {_escape_html(section['title'])}")
+            lines.append("")
+            lines.append(
+                "Dùng <b>hien 1</b> để xem chương/mục con, <b>xem 1 1</b> để xem nội dung của mục đó, "
+                "<b>xem 1 1 1</b> để xem chi tiết cấp sâu hơn."
+            )
+            return "\n".join(lines), None
+
+        node = _get_node_by_path(sections, path)
+        if node is None:
+            return "❌ Số mục không hợp lệ.", None
+
+        if not node["children"]:
+            return f"📋 <b>Mục lục {_escape_html(_format_path(path))}</b>:\n\nKhông có mục con.", None
+
+        lines = [f"📋 <b>Mục lục {_escape_html(_format_path(path))}</b>: {_escape_html(node['title'])}"]
+        for i, child in enumerate(node["children"], 1):
+            child_path = path + [i]
+            lines.append(f"{_escape_html(_format_path(child_path))}. {_escape_html(child['title'])}")
         lines.append("")
-        lines.append("Dùng <b>mdquytrinh tim ~...</b> để tìm quy trình, <b>mdquytrinh xem 1</b> hoặc <b>mdquytrinh xem 3 1</b> để xem chi tiết, <b>mdquytrinh them &lt;file.md&gt;</b> để gộp thêm file.")
+        lines.append("Dùng <b>xem</b> với cùng số thứ tự để xem nội dung chi tiết.")
         return "\n".join(lines), None
 
     if formula_lower.startswith("tim "):
@@ -158,44 +199,36 @@ def process_procedure_markdown(md_content, formula):
         query = _strip_quotes(query).casefold()
 
         results = []
-        for i, section in enumerate(sections, 1):
-            haystack = " ".join(
-                [
-                    section["title"],
-                    " ".join(section["intro"]),
-                    " ".join(sub["title"] for sub in section["subsections"]),
-                    " ".join(" ".join(sub["body"]) for sub in section["subsections"]),
-                ]
-            ).casefold()
-            if query and query in haystack:
-                results.append(f"{i}. {_escape_html(section['title'])}")
+        def walk(nodes, prefix=None):
+            prefix = prefix or []
+            for i, node in enumerate(nodes, 1):
+                path = prefix + [i]
+                haystack = _collect_text(node).casefold()
+                if query and query in haystack:
+                    results.append(f"{_escape_html(_format_path(path))}. {_escape_html(node['title'])}")
+                walk(node["children"], path)
+
+        walk(sections)
 
         if not results:
-            return "❌ Không tìm thấy quy trình nào khớp.", None
+            return "❌ Không tìm thấy mục nào khớp.", None
 
         return "🔍 <b>Kết quả tìm kiếm</b>:\n\n" + "\n".join(results), None
 
     if formula_lower.startswith("xem "):
-        parts = formula.split()
-        if len(parts) not in (2, 3):
-            return "❌ Dùng đúng dạng <b>mdquytrinh xem 1</b> hoặc <b>mdquytrinh xem 3 1</b>.", None
+        path = _parse_path(parts[1:])
+        if path is None or not (1 <= len(path) <= 3):
+            return "❌ Dùng đúng dạng <b>xem 1</b>, <b>xem 1 1</b> hoặc <b>xem 1 1 1</b>.", None
 
-        if not parts[1].isdigit():
-            return "❌ Dùng đúng dạng <b>mdquytrinh xem 1</b> hoặc <b>mdquytrinh xem 3 1</b>.", None
+        node = _get_node_by_path(sections, path)
+        if node is None:
+            return "❌ Số mục không hợp lệ.", None
 
-        section_index = int(parts[1])
-        if section_index < 1 or section_index > len(sections):
-            return "❌ Số quy trình không hợp lệ.", None
-
-        subsection_index = None
-        if len(parts) == 3:
-            if not parts[2].isdigit():
-                return "❌ Dùng đúng dạng <b>mdquytrinh xem 1</b> hoặc <b>mdquytrinh xem 3 1</b>.", None
-            subsection_index = int(parts[2])
-
-        rendered = _render_section(sections[section_index - 1], section_index, subsection_index)
-        if not rendered:
-            return "❌ Số mục con không hợp lệ.", None
+        rendered = _render_node(node, path)
         return rendered, None
 
-    return "❌ Lệnh không hợp lệ cho file Markdown. Dùng <b>mdquytrinh hien</b>, <b>mdquytrinh tim ~...</b>, <b>mdquytrinh xem 1</b>, <b>mdquytrinh xem 3 1</b>, hoặc <b>mdquytrinh them &lt;file.md&gt;</b>.", None
+    return (
+        "❌ Lệnh không hợp lệ cho file Markdown. Dùng <b>hien</b>, <b>hien 1</b>, <b>tim ~...</b>, "
+        "<b>xem 1</b>, <b>xem 1 1</b>, <b>xem 1 1 1</b>, hoặc <b>them &lt;file.md&gt;</b>.",
+        None,
+    )

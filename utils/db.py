@@ -11,6 +11,14 @@ def db_set(user_id, key, value):
     headers = {"Authorization": f"Bearer {REDIS_TOKEN}"}
     requests.get(url, headers=headers)
 
+
+def db_set_kind(user_id, key, kind):
+    """Stores a lightweight type marker for a saved file."""
+    full_key = f"user:{user_id}:kind:{key}"
+    url = f"{REDIS_URL}/set/{full_key}/{kind}"
+    headers = {"Authorization": f"Bearer {REDIS_TOKEN}"}
+    requests.get(url, headers=headers)
+
 def db_get(user_id, key):
     """Retrieves a file_id by filename"""
     full_key = f"user:{user_id}:file:{key}"
@@ -18,6 +26,23 @@ def db_get(user_id, key):
     headers = {"Authorization": f"Bearer {REDIS_TOKEN}"}
     res = requests.get(url, headers=headers).json()
     return res.get("result")
+
+
+def db_get_kind(user_id, key):
+    """Retrieves the stored file kind marker, if any."""
+    full_key = f"user:{user_id}:kind:{key}"
+    url = f"{REDIS_URL}/get/{full_key}"
+    headers = {"Authorization": f"Bearer {REDIS_TOKEN}"}
+    res = requests.get(url, headers=headers).json()
+    return res.get("result")
+
+
+def db_delete_kind(user_id, key):
+    """Deletes a stored file kind marker."""
+    full_key = f"user:{user_id}:kind:{key}"
+    url = f"{REDIS_URL}/del/{full_key}"
+    headers = {"Authorization": f"Bearer {REDIS_TOKEN}"}
+    requests.get(url, headers=headers)
 
 def db_list(user_id):
     """Lists all filenames stored by the user"""

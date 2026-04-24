@@ -14,6 +14,7 @@ from utils.procedure import (
     count_procedure_sections,
 )
 from utils.db import db_set, db_get, db_list, db_delete
+from utils.db import db_set_kind, db_get_kind, db_delete_kind
 
 # Initialize FastAPI
 app = FastAPI()
@@ -21,6 +22,22 @@ app = FastAPI()
 # Token from Environment Variable
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 bot = Bot(token=TOKEN)
+
+
+def _is_markdown_name(name: str) -> bool:
+    name = name.lower()
+    return "md" in name
+
+
+def _normalize_markdown_name(name: str) -> str:
+    return os.path.splitext(name.lower())[0]
+
+
+def _is_markdown_saved(user_id, fname):
+    kind = db_get_kind(user_id, fname)
+    if kind:
+        return kind == "md"
+    return "md" in fname.lower()
 
 def get_main_menu():
     keyboard = [
@@ -82,8 +99,7 @@ async def handle_markdown_logic(user_id, fname, formula, message):
 
     if formula_lower.startswith("them "):
         source_name = formula[5:].strip().lower()
-        if source_name.endswith(".md"):
-            source_name = source_name[:-3]
+        source_name = _normalize_markdown_name(source_name)
 
         if source_name == fname:
             await message.reply_text("❌ Không thể gộp file vào chính nó.", parse_mode='Markdown')
@@ -108,6 +124,7 @@ async def handle_markdown_logic(user_id, fname, formula, message):
         )
 
         db_set(user_id, fname, sent_msg.document.file_id)
+        db_set_kind(user_id, fname, "md")
         db_delete(user_id, source_name)
 
         base_count = count_procedure_sections(content)
@@ -142,7 +159,7 @@ async def webhook_handler(request: Request):
             
             if query.data == 'mode_help':
                 await query.edit_message_text(
-                    "ℹ️ **Hướng dẫn tính năng**\n\n- Upload CSV để nạp file, ví dụ `bctk.csv`.\n- CSV dùng lệnh: `tên_file hien`, `tên_file tim ...`, `tên_file xem ...`, `tên_file xoa`.\n- Markdown quy trình dùng tên có tiền tố `md`, ví dụ `mdquytrinh.md`.\n- Quy trình Markdown dùng `mdquytrinh hien`, `mdquytrinh tim ~...`, `mdquytrinh xem 1 1`, `mdquytrinh them file.md`.\n- Lịch âm dương dùng `callicham 10/3/2026` hoặc `callicham am 10/3/2026`.\n- Quản lý file: `/list`, `/del <tên_file>`.\n\nVí dụ: `bctk tim 5~'hoacuong' and 1==2020`",
+                    "ℹ️ **Hướng dẫn tính năng**\n\n- Upload CSV để nạp file, ví dụ `bctk.csv`.\n- CSV dùng lệnh: `tên_file hien`, `tên_file tim ...`, `tên_file xem ...`, `tên_file xoa`.\n- Markdown dùng tên có chữ `md` trong tên, ví dụ `mdquytrinh.md` hoặc `luatmd.doc.md`.\n- Markdown dùng `tên_file hien` hoặc `tên_file hien 1` để xem mục lục, `tên_file xem 1 1` hoặc `tên_file xem 1 1 1` để xem chi tiết, `tên_file them file.md` để gộp file.\n- Lịch âm dương dùng `callicham 10/3/2026` hoặc `callicham am 10/3/2026`.\n- Quản lý file: `/list`, `/del <tên_file>`.\n\nVí dụ: `bctk tim 5~'hoacuong' and 1==2020`",
                     parse_mode='Markdown'
                 )
             elif query.data == 'mode_list':
@@ -172,6 +189,7 @@ async def webhook_handler(request: Request):
                 fname = parts[1].strip().lower()
                 existed = db_get(user_id, fname)
                 db_delete(user_id, fname)
+                db_delete_kind(user_id, fname)
                 if existed:
                     await message.reply_text(f"🗑️ Đã xóa file `{fname}` khỏi bộ nhớ.", parse_mode='Markdown')
                 else:
@@ -187,6 +205,7 @@ async def webhook_handler(request: Request):
                     if action in {"xoa", "del", "delete"}:
                         existed = db_get(user_id, fname)
                         db_delete(user_id, fname)
+                        db_delete_kind(user_id, fname)
                         if existed:
                             await message.reply_text(f"🗑️ Đã xóa file `{fname}` khỏi bộ nhớ.", parse_mode='Markdown')
                         else:
@@ -198,7 +217,7 @@ async def webhook_handler(request: Request):
                     parts = text.split(" ", 1)
                     fname = parts[0].strip().lower()
                     formula = parts[1].strip()
-                    if fname.startswith("md"):
+                    if _is_markdown_saved(user_id, fname):
                         if await handle_markdown_logic(user_id, fname, formula, message):
                             return {"status": "ok"}
                     if await handle_matrix_logic(user_id, fname, formula, message):
@@ -211,8 +230,8 @@ async def webhook_handler(request: Request):
                         fname = doc.file_name.lower().replace(".csv", "")
                         if await handle_matrix_logic(user_id, fname, text, message):
                             return {"status": "ok"}
-                    if doc.file_name.lower().endswith('.md'):
-                        fname = doc.file_name.lower().replace(".md", "")
+                    if _is_markdown_name(doc.file_name):
+                        fname = _normalize_markdown_name(doc.file_name)
                         if await handle_markdown_logic(user_id, fname, text, message):
                             return {"status": "ok"}
 
@@ -232,6 +251,7 @@ async def webhook_handler(request: Request):
                 doc = message.document
                 fname = doc.file_name.lower().replace(".csv", "")
                 db_set(user_id, fname, doc.file_id)
+                db_set_kind(user_id, fname, "csv")
                 await message.reply_text(f"🔄 Đã ghi nhớ file: `{fname}`", parse_mode='Markdown')
                 
                 file = await bot.get_file(doc.file_id)
@@ -240,10 +260,11 @@ async def webhook_handler(request: Request):
                 await message.reply_text(info)
                 return {"status": "ok"}
 
-            if message.document and message.document.file_name.lower().endswith('.md'):
+            if message.document and _is_markdown_name(message.document.file_name):
                 doc = message.document
-                fname = doc.file_name.lower().replace(".md", "")
+                fname = _normalize_markdown_name(doc.file_name)
                 db_set(user_id, fname, doc.file_id)
+                db_set_kind(user_id, fname, "md")
                 await message.reply_text(f"🔄 Đã ghi nhớ file quy trình: `{fname}`", parse_mode='Markdown')
 
                 file = await bot.get_file(doc.file_id)
