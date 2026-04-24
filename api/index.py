@@ -128,127 +128,131 @@ async def handle_markdown_logic(user_id, fname, formula, message):
 @app.post("/api/webhook")
 async def webhook_handler(request: Request):
     """Handles Telegram Webhooks"""
-    data = await request.json()
-    update = Update.de_json(data, bot)
-    
-    if not update.effective_user:
-        return {"status": "ok"}
-    user_id = update.effective_user.id
-
-    if update.callback_query:
-        query = update.callback_query
-        await query.answer()
+    try:
+        data = await request.json()
+        update = Update.de_json(data, bot)
         
-        if query.data == 'mode_help':
-            await query.edit_message_text(
-                "ℹ️ **Hướng dẫn tính năng**\n\n- Upload CSV để nạp file, ví dụ `bctk.csv`.\n- CSV dùng lệnh: `tên_file hien`, `tên_file tim ...`, `tên_file xem ...`, `tên_file xoa`.\n- Markdown quy trình dùng tên có tiền tố `md`, ví dụ `mdquytrinh.md`.\n- Quy trình Markdown dùng `mdquytrinh hien`, `mdquytrinh tim ~...`, `mdquytrinh xem 1 1`, `mdquytrinh them file.md`.\n- Lịch âm dương dùng `callicham 10/3/2026` hoặc `callicham am 10/3/2026`.\n- Quản lý file: `/list`, `/del <tên_file>`.\n\nVí dụ: `bctk tim 5~'hoacuong' and 1==2020`",
-                parse_mode='Markdown'
-            )
-        elif query.data == 'mode_list':
-            files = db_list(user_id)
-            if not files:
-                await query.edit_message_text("📭 Bạn chưa lưu file nào.")
-            else:
-                text = "📋 **Danh sách file của bạn:**\n\n" + "\n".join([f"- `{f}`" for f in files])
-                await query.edit_message_text(text, parse_mode='Markdown')
-        return {"status": "ok"}
+        if not update.effective_user:
+            return {"status": "ok"}
+        user_id = update.effective_user.id
 
-    if update.message:
-        message = update.message
-        text = message.text.strip() if message.text else ""
-        
-        # 1. Commands
-        if text.startswith("/start"):
-            await message.reply_text("👋 Chào mừng!", reply_markup=get_main_menu())
+        if update.callback_query:
+            query = update.callback_query
+            await query.answer()
+            
+            if query.data == 'mode_help':
+                await query.edit_message_text(
+                    "ℹ️ **Hướng dẫn tính năng**\n\n- Upload CSV để nạp file, ví dụ `bctk.csv`.\n- CSV dùng lệnh: `tên_file hien`, `tên_file tim ...`, `tên_file xem ...`, `tên_file xoa`.\n- Markdown quy trình dùng tên có tiền tố `md`, ví dụ `mdquytrinh.md`.\n- Quy trình Markdown dùng `mdquytrinh hien`, `mdquytrinh tim ~...`, `mdquytrinh xem 1 1`, `mdquytrinh them file.md`.\n- Lịch âm dương dùng `callicham 10/3/2026` hoặc `callicham am 10/3/2026`.\n- Quản lý file: `/list`, `/del <tên_file>`.\n\nVí dụ: `bctk tim 5~'hoacuong' and 1==2020`",
+                    parse_mode='Markdown'
+                )
+            elif query.data == 'mode_list':
+                files = db_list(user_id)
+                if not files:
+                    await query.edit_message_text("📭 Bạn chưa lưu file nào.")
+                else:
+                    text = "📋 **Danh sách file của bạn:**\n\n" + "\n".join([f"- `{f}`" for f in files])
+                    await query.edit_message_text(text, parse_mode='Markdown')
             return {"status": "ok"}
 
-        if text.lower().startswith("/del"):
-            parts = text.split(maxsplit=1)
-            if len(parts) < 2:
-                await message.reply_text("Dùng: `/del <tên_file>`", parse_mode='Markdown')
+        if update.message:
+            message = update.message
+            text = message.text.strip() if message.text else ""
+            
+            # 1. Commands
+            if text.startswith("/start"):
+                await message.reply_text("👋 Chào mừng!", reply_markup=get_main_menu())
                 return {"status": "ok"}
 
-            fname = parts[1].strip().lower()
-            existed = db_get(user_id, fname)
-            db_delete(user_id, fname)
-            if existed:
-                await message.reply_text(f"🗑️ Đã xóa file `{fname}` khỏi bộ nhớ.", parse_mode='Markdown')
-            else:
-                await message.reply_text(f"⚠️ Không tìm thấy file `{fname}` trong bộ nhớ.", parse_mode='Markdown')
-            return {"status": "ok"}
-
-        # 2. Handle Matrix (by Name or Reply)
-        if text:
-            if " " in text:
-                parts = text.split(" ", 1)
-                fname = parts[0].strip().lower()
-                action = parts[1].strip().lower()
-                if action in {"xoa", "del", "delete"}:
-                    existed = db_get(user_id, fname)
-                    db_delete(user_id, fname)
-                    if existed:
-                        await message.reply_text(f"🗑️ Đã xóa file `{fname}` khỏi bộ nhớ.", parse_mode='Markdown')
-                    else:
-                        await message.reply_text(f"⚠️ Không tìm thấy file `{fname}` trong bộ nhớ.", parse_mode='Markdown')
+            if text.lower().startswith("/del"):
+                parts = text.split(maxsplit=1)
+                if len(parts) < 2:
+                    await message.reply_text("Dùng: `/del <tên_file>`", parse_mode='Markdown')
                     return {"status": "ok"}
 
-            # Check if it's "name formula"
-            if " " in text:
-                parts = text.split(" ", 1)
-                fname = parts[0].strip().lower()
-                formula = parts[1].strip()
-                if fname.startswith("md"):
-                    if await handle_markdown_logic(user_id, fname, formula, message):
+                fname = parts[1].strip().lower()
+                existed = db_get(user_id, fname)
+                db_delete(user_id, fname)
+                if existed:
+                    await message.reply_text(f"🗑️ Đã xóa file `{fname}` khỏi bộ nhớ.", parse_mode='Markdown')
+                else:
+                    await message.reply_text(f"⚠️ Không tìm thấy file `{fname}` trong bộ nhớ.", parse_mode='Markdown')
+                return {"status": "ok"}
+
+            # 2. Handle Matrix (by Name or Reply)
+            if text:
+                if " " in text:
+                    parts = text.split(" ", 1)
+                    fname = parts[0].strip().lower()
+                    action = parts[1].strip().lower()
+                    if action in {"xoa", "del", "delete"}:
+                        existed = db_get(user_id, fname)
+                        db_delete(user_id, fname)
+                        if existed:
+                            await message.reply_text(f"🗑️ Đã xóa file `{fname}` khỏi bộ nhớ.", parse_mode='Markdown')
+                        else:
+                            await message.reply_text(f"⚠️ Không tìm thấy file `{fname}` trong bộ nhớ.", parse_mode='Markdown')
                         return {"status": "ok"}
-                if await handle_matrix_logic(user_id, fname, formula, message):
-                    return {"status": "ok"}
-            
-            # Check if it's a Reply to CSV
-            if message.reply_to_message and message.reply_to_message.document:
-                doc = message.reply_to_message.document
-                if doc.file_name.lower().endswith('.csv'):
-                    fname = doc.file_name.lower().replace(".csv", "")
-                    if await handle_matrix_logic(user_id, fname, text, message):
+
+                # Check if it's "name formula"
+                if " " in text:
+                    parts = text.split(" ", 1)
+                    fname = parts[0].strip().lower()
+                    formula = parts[1].strip()
+                    if fname.startswith("md"):
+                        if await handle_markdown_logic(user_id, fname, formula, message):
+                            return {"status": "ok"}
+                    if await handle_matrix_logic(user_id, fname, formula, message):
                         return {"status": "ok"}
-                if doc.file_name.lower().endswith('.md'):
-                    fname = doc.file_name.lower().replace(".md", "")
-                    if await handle_markdown_logic(user_id, fname, text, message):
-                        return {"status": "ok"}
+                
+                # Check if it's a Reply to CSV
+                if message.reply_to_message and message.reply_to_message.document:
+                    doc = message.reply_to_message.document
+                    if doc.file_name.lower().endswith('.csv'):
+                        fname = doc.file_name.lower().replace(".csv", "")
+                        if await handle_matrix_logic(user_id, fname, text, message):
+                            return {"status": "ok"}
+                    if doc.file_name.lower().endswith('.md'):
+                        fname = doc.file_name.lower().replace(".md", "")
+                        if await handle_markdown_logic(user_id, fname, text, message):
+                            return {"status": "ok"}
 
-        # 3. Handle Date
-        cal_res = process_callicham_input(text)
-        if cal_res is not None:
-            await message.reply_text(cal_res, parse_mode='Markdown')
-            return {"status": "ok"}
+            # 3. Handle Date
+            cal_res = process_callicham_input(text)
+            if cal_res is not None:
+                await message.reply_text(cal_res)
+                return {"status": "ok"}
 
-        if text and "/" in text and len(text) >= 8:
-            res = process_date_input(text)
-            await message.reply_text(res)
-            return {"status": "ok"}
+            if text and "/" in text and len(text) >= 8:
+                res = process_date_input(text)
+                await message.reply_text(res)
+                return {"status": "ok"}
 
-        # 4. Handle file upload
-        if message.document and message.document.file_name.lower().endswith('.csv'):
-            doc = message.document
-            fname = doc.file_name.lower().replace(".csv", "")
-            db_set(user_id, fname, doc.file_id)
-            await message.reply_text(f"🔄 Đã ghi nhớ file: `{fname}`", parse_mode='Markdown')
-            
-            file = await bot.get_file(doc.file_id)
-            content = requests.get(file.file_path).content.decode('utf-8')
-            info = get_csv_info(content)
-            await message.reply_text(info, parse_mode='HTML')
-            return {"status": "ok"}
+            # 4. Handle file upload
+            if message.document and message.document.file_name.lower().endswith('.csv'):
+                doc = message.document
+                fname = doc.file_name.lower().replace(".csv", "")
+                db_set(user_id, fname, doc.file_id)
+                await message.reply_text(f"🔄 Đã ghi nhớ file: `{fname}`", parse_mode='Markdown')
+                
+                file = await bot.get_file(doc.file_id)
+                content = requests.get(file.file_path).content.decode('utf-8')
+                info = get_csv_info(content)
+                await message.reply_text(info)
+                return {"status": "ok"}
 
-        if message.document and message.document.file_name.lower().endswith('.md'):
-            doc = message.document
-            fname = doc.file_name.lower().replace(".md", "")
-            db_set(user_id, fname, doc.file_id)
-            await message.reply_text(f"🔄 Đã ghi nhớ file quy trình: `{fname}`", parse_mode='Markdown')
+            if message.document and message.document.file_name.lower().endswith('.md'):
+                doc = message.document
+                fname = doc.file_name.lower().replace(".md", "")
+                db_set(user_id, fname, doc.file_id)
+                await message.reply_text(f"🔄 Đã ghi nhớ file quy trình: `{fname}`", parse_mode='Markdown')
 
-            file = await bot.get_file(doc.file_id)
-            content = requests.get(file.file_path).content.decode('utf-8')
-            info = get_procedure_info(content)
-            await message.reply_text(info, parse_mode='Markdown')
-            return {"status": "ok"}
+                file = await bot.get_file(doc.file_id)
+                content = requests.get(file.file_path).content.decode('utf-8')
+                info = get_procedure_info(content)
+                await message.reply_text(info, parse_mode='HTML')
+                return {"status": "ok"}
 
-    return {"status": "ok"}
+        return {"status": "ok"}
+    except Exception as e:
+        print(f"Webhook error: {e}")
+        return {"status": "ok"}
