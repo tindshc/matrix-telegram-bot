@@ -76,6 +76,54 @@ def _extract_numeric_column_contains(condition, columns):
 
     return columns[index], needle
 
+
+def _evaluate_atomic_filter(df, clause, columns):
+    """
+    Evaluate one atomic filter clause and return a boolean Series.
+
+    Supports:
+    - `5~'abc'` for contains, case-insensitive
+    - normal pandas query expressions such as `3=='HOACUONG'` or `1==2020`
+    """
+    column_name, needle = _extract_numeric_column_contains(clause, columns)
+    if column_name:
+        series = df[column_name].astype(str)
+        return series.str.contains(re.escape(needle), case=False, na=False, regex=False)
+
+    condition = _normalize_single_equals(clause)
+    condition = _resolve_numeric_column_refs(condition, columns)
+    result = df.eval(condition, engine="python")
+    if isinstance(result, bool):
+        return pd.Series([result] * len(df), index=df.index)
+    return result.fillna(False)
+
+
+def _evaluate_timed_filter(df, condition, columns):
+    """
+    Evaluate a `tim` condition supporting `and` / `or` with `~` contains clauses.
+    """
+    or_parts = re.split(r"\s+or\s+", condition, flags=re.IGNORECASE)
+    final_mask = None
+
+    for or_part in or_parts:
+        and_parts = re.split(r"\s+and\s+", or_part, flags=re.IGNORECASE)
+        part_mask = None
+
+        for clause in and_parts:
+            clause = clause.strip()
+            if not clause:
+                continue
+            mask = _evaluate_atomic_filter(df, clause, columns)
+            part_mask = mask if part_mask is None else (part_mask & mask)
+
+        if part_mask is None:
+            continue
+        final_mask = part_mask if final_mask is None else (final_mask | part_mask)
+
+    if final_mask is None:
+        return None
+    return final_mask.fillna(False)
+
 def get_csv_info(csv_content):
     """Returns column names and basic info of the CSV"""
     try:
@@ -115,18 +163,10 @@ def process_matrix(csv_content, formula):
         # 1. Handle Filter/Query
         if formula_lower.startswith("tim "):
             condition = formula[4:].strip()
-            column_name, needle = _extract_numeric_column_contains(condition, list(df.columns))
-            if column_name:
-                series = df[column_name].astype(str)
-                mask = series.str.contains(re.escape(needle), case=False, na=False)
-                filtered_df = df[mask]
-                if filtered_df.empty:
-                    return "❌ Không có dòng nào khớp với điều kiện tìm kiếm.", None
-                return f"🔍 **Kết quả tìm kiếm**:\n\n{filtered_df.to_markdown()}", None
-
-            condition = _normalize_single_equals(condition)
-            condition = _resolve_numeric_column_refs(condition, list(df.columns))
-            filtered_df = df.query(condition, engine="python")
+            mask = _evaluate_timed_filter(df, condition, list(df.columns))
+            if mask is None:
+                return "❌ Không có điều kiện hợp lệ trong lệnh tìm kiếm.", None
+            filtered_df = df[mask]
             if filtered_df.empty:
                 return "❌ Không có dòng nào khớp với điều kiện tìm kiếm.", None
             return f"🔍 **Kết quả tìm kiếm**:\n\n{filtered_df.to_markdown()}", None
