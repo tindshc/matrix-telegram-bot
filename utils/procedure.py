@@ -119,7 +119,7 @@ def _render_node(node, path):
         lines.append("<b>Mục con:</b>")
         for i, child in enumerate(node["children"], 1):
             child_path = path + [i]
-            lines.append(f"{_escape_html(_format_path(child_path))}. {_escape_html(child['title'])}")
+            lines.append(f"{i}. {_escape_html(child['title'])}")
     return "\n".join(lines)
 
 
@@ -187,7 +187,7 @@ def process_procedure_markdown(md_content, formula):
         lines = [f"📋 <b>Mục lục {_escape_html(_format_path(path))}</b>: {_escape_html(node['title'])}"]
         for i, child in enumerate(node["children"], 1):
             child_path = path + [i]
-            lines.append(f"{_escape_html(_format_path(child_path))}. {_escape_html(child['title'])}")
+            lines.append(f"{i}. {_escape_html(child['title'])}")
         lines.append("")
         lines.append("Dùng <b>xem</b> với cùng số thứ tự để xem nội dung chi tiết.")
         return "\n".join(lines), None
