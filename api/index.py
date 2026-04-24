@@ -123,7 +123,7 @@ async def handle_markdown_logic(user_id, fname, formula, message):
         return True
 
     result_text, _ = process_procedure_markdown(content, formula)
-    await message.reply_text(result_text, parse_mode='Markdown')
+    await message.reply_text(result_text, parse_mode='HTML')
     return True
 
 @app.post("/api/webhook")
@@ -237,7 +237,7 @@ async def webhook_handler(request: Request):
             file = await bot.get_file(doc.file_id)
             content = requests.get(file.file_path).content.decode('utf-8')
             info = get_csv_info(content)
-            await message.reply_text(info, parse_mode='Markdown')
+            await message.reply_text(info, parse_mode='HTML')
             return {"status": "ok"}
 
         if message.document and message.document.file_name.lower().endswith('.md'):
