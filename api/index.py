@@ -77,7 +77,7 @@ async def webhook_handler(request: Request):
         
         if query.data == 'mode_matrix':
             await query.edit_message_text(
-                "📂 **Chế độ Matrix**\n\n- Gửi file CSV để lưu.\n- Tính toán: `tên_file cột_mới = biểu_thức` (Sẽ tự lưu đè).\n- Lọc dữ liệu: `tên_file filter điều_kiện`.\n\nVD: `bctk filter Phuong=='HOACUONG'`",
+                "📂 **Chế độ Matrix**\n\n- Gửi file CSV để lưu.\n- Xem cột theo số thứ tự: `tên_file hien`\n- Tìm theo số cột: `tên_file tim 3=='HOACUONG'`\n- Tính toán: `tên_file cột_mới = biểu_thức` (Sẽ tự lưu đè).\n- Lọc dữ liệu: `tên_file filter điều_kiện`.\n\nVD: `bctk filter Phuong=='HOACUONG'`",
                 parse_mode='Markdown'
             )
         elif query.data == 'mode_calendar':

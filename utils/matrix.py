@@ -1,5 +1,36 @@
 import pandas as pd
 import io
+import re
+
+
+def _format_column_listing(df):
+    """Return a numbered list of columns for user-facing display."""
+    rows = [{"#": idx + 1, "Cột": col} for idx, col in enumerate(df.columns)]
+    return pd.DataFrame(rows).to_markdown(index=False)
+
+
+def _resolve_numeric_column_refs(condition, columns):
+    """
+    Replace references like `3=='X'` with the actual column name.
+
+    The bot uses 1-based indexes in the `hien` output, so the same numbering
+    is accepted here for `tim`.
+    """
+    def replace_match(match):
+        index = int(match.group(1)) - 1
+        op = match.group(2)
+        if index < 0 or index >= len(columns):
+            return match.group(0)
+        col_name = columns[index]
+        return f"`{col_name}` {op}"
+
+    pattern = re.compile(r'(?<![\w`"\'\]])\b(\d+)\b\s*(==|!=|>=|<=|=|>|<)')
+    return pattern.sub(replace_match, condition)
+
+
+def _normalize_single_equals(condition):
+    """Convert single `=` to `==` without touching `>=`, `<=`, `!=`, or `==`."""
+    return re.sub(r'(?<![<>=!])=(?![=])', '==', condition)
 
 def get_csv_info(csv_content):
     """Returns column names and basic info of the CSV"""
@@ -18,13 +49,29 @@ def process_matrix(csv_content, formula):
     try:
         # Use low_memory=False and engine='python' for stability
         df = pd.read_csv(io.StringIO(csv_content), engine='python')
-        
+        formula = formula.strip()
+        formula_lower = formula.lower()
+
+        # 0. Show columns with numbering
+        if formula_lower == "hien":
+            text = "📋 **Danh sách cột**:\n\n" + _format_column_listing(df)
+            text += "\n\nDùng số thứ tự này trong lệnh `tim`, ví dụ: `tim 3=='HOACUONG'`."
+            return text, None
+
         # 1. Handle Filter/Query
-        if formula.lower().startswith("filter "):
+        if formula_lower.startswith("tim "):
+            condition = formula[4:].strip()
+            condition = _normalize_single_equals(condition)
+            condition = _resolve_numeric_column_refs(condition, list(df.columns))
+            filtered_df = df.query(condition, engine="python")
+            if filtered_df.empty:
+                return "❌ Không có dòng nào khớp với điều kiện tìm kiếm.", None
+            return f"🔍 **Kết quả tìm kiếm**:\n\n{filtered_df.to_markdown()}", None
+
+        if formula_lower.startswith("filter "):
             condition = formula[7:].strip()
             # Standardize equality
-            if '==' not in condition and '=' in condition:
-                condition = condition.replace('=', '==')
+            condition = _normalize_single_equals(condition)
             
             # Use engine='python' for more robust querying
             filtered_df = df.query(condition, engine='python')
