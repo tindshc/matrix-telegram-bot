@@ -77,7 +77,7 @@ async def webhook_handler(request: Request):
         
         if query.data == 'mode_matrix':
             await query.edit_message_text(
-                "📂 **Chế độ Matrix**\n\n- Gửi file CSV để lưu.\n- Xem cột theo số thứ tự: `tên_file hien`\n- Tìm theo số cột: `tên_file tim 5~'đồng yên'`\n- Xem một dòng: `tên_file xem 1`\n- Tính toán: `tên_file cột_mới = biểu_thức` (Sẽ tự lưu đè).\n- Lọc dữ liệu: `tên_file filter điều_kiện`.\n\nVD: `bctk tim 3=='HOACUONG'`",
+                "📂 **Chế độ Matrix**\n\n- Gửi file CSV để lưu.\n- Xem cột theo số thứ tự: `tên_file hien`\n- Tìm theo số cột: `tên_file tim 5~'đồng yên'`\n- Xem một dòng: `tên_file xem 1`\n- Xóa file: `tên_file xoa` hoặc `/del tên_file`\n- Tính toán: `tên_file cột_mới = biểu_thức` (Sẽ tự lưu đè).\n- Lọc dữ liệu: `tên_file filter điều_kiện`.\n\nVD: `bctk tim 3=='HOACUONG'`",
                 parse_mode='Markdown'
             )
         elif query.data == 'mode_calendar':
@@ -103,8 +103,36 @@ async def webhook_handler(request: Request):
             await message.reply_text("👋 Chào mừng!", reply_markup=get_main_menu())
             return {"status": "ok"}
 
+        if text.lower().startswith("/del"):
+            parts = text.split(maxsplit=1)
+            if len(parts) < 2:
+                await message.reply_text("Dùng: `/del <tên_file>`", parse_mode='Markdown')
+                return {"status": "ok"}
+
+            fname = parts[1].strip().lower()
+            existed = db_get(user_id, fname)
+            db_delete(user_id, fname)
+            if existed:
+                await message.reply_text(f"🗑️ Đã xóa file `{fname}` khỏi bộ nhớ.", parse_mode='Markdown')
+            else:
+                await message.reply_text(f"⚠️ Không tìm thấy file `{fname}` trong bộ nhớ.", parse_mode='Markdown')
+            return {"status": "ok"}
+
         # 2. Handle Matrix (by Name or Reply)
         if text:
+            if " " in text:
+                parts = text.split(" ", 1)
+                fname = parts[0].strip().lower()
+                action = parts[1].strip().lower()
+                if action in {"xoa", "del", "delete"}:
+                    existed = db_get(user_id, fname)
+                    db_delete(user_id, fname)
+                    if existed:
+                        await message.reply_text(f"🗑️ Đã xóa file `{fname}` khỏi bộ nhớ.", parse_mode='Markdown')
+                    else:
+                        await message.reply_text(f"⚠️ Không tìm thấy file `{fname}` trong bộ nhớ.", parse_mode='Markdown')
+                    return {"status": "ok"}
+
             # Check if it's "name formula"
             if " " in text:
                 parts = text.split(" ", 1)
