@@ -1,5 +1,6 @@
 pandas
 vnlunar
+vncalendar
 python-telegram-bot
 fastapi
 uvicorn

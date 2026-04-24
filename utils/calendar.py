@@ -1,31 +1,60 @@
 from vnlunar import get_full_info
+from vncalendar import VanSu
 from datetime import datetime
 
-def get_lunar_info(day, month, year):
+def get_solar_info_from_lunar(day, month, year, leap=0):
     """
-    Given a solar date, returns detailed lunar info.
+    Converts Lunar date to Solar and returns full info.
+    """
+    try:
+        # Convert Lunar to Solar
+        s_day, s_month, s_year = VanSu.SolarAndLunar.convertLunar2Solar(day, month, year, leap)
+        
+        # Now get full info from that solar date
+        return get_full_info_from_solar(s_day, s_month, s_year)
+    except Exception as e:
+        return f"Lỗi chuyển đổi lịch âm: {str(e)}"
+
+def get_full_info_from_solar(day, month, year):
+    """
+    Returns full details (Lunar, Can Chi, Solar Term) from Solar date.
     """
     try:
         info = get_full_info(day, month, year)
         
-        # info structure typically contains lunar_day, lunar_month, lunar_year, can_chi, etc.
         res = []
-        res.append(f"📅 Dương lịch: {day}/{month}/{year}")
-        res.append(f"🌙 Âm lịch: {info['lunar_day']}/{info['lunar_month']} ({'Nhuận' if info['is_leap'] else 'Thường'})")
+        res.append(f"☀️ Dương lịch: {day}/{month}/{year}")
+        res.append(f"🌙 Âm lịch: {info['lunar']['day']}/{info['lunar']['month']}/{info['lunar']['year']} ({'Nhuận' if info['is_leap'] else 'Thường'})")
         res.append(f"✨ Năm: {info['can_chi']['year']}")
         res.append(f"🎋 Tháng: {info['can_chi']['month']}")
         res.append(f"🧧 Ngày: {info['can_chi']['day']}")
-        res.append(f"🕒 Giờ: {info['can_chi']['hour']}")
         res.append(f"🌡️ Tiết khí: {info['solar_term']}")
         
         return "\n".join(res)
     except Exception as e:
         return f"Lỗi tính lịch: {str(e)}"
 
-def solar_to_lunar_str(date_str):
-    """Parses dd/mm/yyyy and returns lunar info"""
+def process_date_input(text):
+    """
+    Parses input and decides if it's Solar or Lunar.
+    Syntax: 
+    - 24/04/2026 (Solar -> Lunar)
+    - am 24/04/2026 (Lunar -> Solar)
+    """
+    text = text.lower().strip()
+    is_lunar = False
+    
+    if text.startswith("am "):
+        is_lunar = True
+        date_str = text.replace("am ", "").strip()
+    else:
+        date_str = text
+
     try:
         dt = datetime.strptime(date_str, "%d/%m/%Y")
-        return get_lunar_info(dt.day, dt.month, dt.year)
+        if is_lunar:
+            return get_solar_info_from_lunar(dt.day, dt.month, dt.year)
+        else:
+            return get_full_info_from_solar(dt.day, dt.month, dt.year)
     except:
-        return "Vui lòng nhập ngày theo định dạng: dd/mm/yyyy (ví dụ: 24/04/2026)"
+        return "Vui lòng nhập đúng định dạng:\n- `dd/mm/yyyy` (Dương -> Âm)\n- `am dd/mm/yyyy` (Âm -> Dương)"
