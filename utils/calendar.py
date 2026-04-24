@@ -1,64 +1,54 @@
-from vnlunar import get_full_info
-import vncalendar
 from datetime import datetime
 
-def get_solar_info_from_lunar(day, month, year, leap=0):
-    """
-    Converts Lunar date to Solar and returns full info.
-    Attempts multiple import styles for vncalendar.
-    """
+
+try:
+    from main import SolarAndLunar, CanChi, TietKhi
+except Exception:
     try:
-        # Try different ways to call convertLunar2Solar based on library version
-        s_day, s_month, s_year = None, None, None
-        
-        try:
-            # Style 1: Direct from VanSu
-            from vncalendar import VanSu
-            s_day, s_month, s_year = VanSu.convertLunar2Solar(day, month, year, leap)
-        except AttributeError:
-            try:
-                # Style 2: Nested SolarAndLunar
-                from vncalendar import VanSu
-                s_day, s_month, s_year = VanSu.SolarAndLunar.convertLunar2Solar(day, month, year, leap)
-            except AttributeError:
-                # Style 3: Direct from vncalendar
-                from vncalendar import SolarAndLunar
-                s_day, s_month, s_year = SolarAndLunar.convertLunar2Solar(day, month, year, leap)
-        
-        if s_day is None:
-            raise Exception("Không tìm thấy hàm chuyển đổi trong thư viện vncalendar.")
-            
-        # Now get full info from that solar date
-        return get_full_info_from_solar(s_day, s_month, s_year)
-    except Exception as e:
-        return f"Lỗi chuyển đổi lịch âm: {str(e)}"
+        from vncalendar.main import SolarAndLunar, CanChi, TietKhi
+    except Exception:
+        from vncalendar import SolarAndLunar, CanChi, TietKhi
+
 
 def get_full_info_from_solar(day, month, year):
     """
-    Returns full details (Lunar, Can Chi, Solar Term) from Solar date.
+    Return lunar date, can chi, and solar term for a Gregorian date.
     """
     try:
-        info = get_full_info(day, month, year)
-        
+        lunar_day, lunar_month, lunar_year, is_leap = SolarAndLunar.convertSolar2Lunar(day, month, year)
+        lunar_label = "Nhuận" if is_leap else "Thường"
+
         res = []
-        res.append(f"☀️ **Ngày Dương lịch**: {day}/{month}/{year}")
-        res.append(f"🌙 **Ngày Âm lịch**: {info['lunar']['day']}/{info['lunar']['month']}/{info['lunar']['year']} ({'Nhuận' if info['is_leap'] else 'Thường'})")
-        res.append(f"✨ **Năm**: {info['can_chi']['year']}")
-        res.append(f"🎋 **Tháng**: {info['can_chi']['month']}")
-        res.append(f"🧧 **Ngày**: {info['can_chi']['day']}")
-        res.append(f"🌡️ **Tiết khí**: {info['solar_term']}")
-        
+        res.append(f"☀️ Ngày Dương lịch: {day}/{month}/{year}")
+        res.append(f"🌙 Ngày Âm lịch: {lunar_day}/{lunar_month}/{lunar_year} ({lunar_label})")
+        res.append(f"✨ Năm: {CanChi.nam(year)}")
+        res.append(f"🎋 Tháng: {CanChi.thang(lunar_month, lunar_year)}")
+        res.append(f"🧧 Ngày: {CanChi.ngay(day, month, year)}")
+        res.append(f"🌡️ Tiết khí: {TietKhi.getTerm(day, month, year)}")
+
         return "\n".join(res)
     except Exception as e:
         return f"Lỗi tính lịch: {str(e)}"
 
+
+def get_solar_info_from_lunar(day, month, year, leap=0):
+    """
+    Convert a lunar date to Gregorian and return full info for the solar date.
+    """
+    try:
+        s_day, s_month, s_year = SolarAndLunar.convertLunar2Solar(day, month, year, leap)
+        return get_full_info_from_solar(s_day, s_month, s_year)
+    except Exception as e:
+        return f"Lỗi chuyển đổi lịch âm: {str(e)}"
+
+
 def process_date_input(text):
     """
-    Parses input and decides if it's Solar or Lunar.
+    Backward-compatible direct date parsing.
     """
     text = text.lower().strip()
     is_lunar = False
-    
+
     if text.startswith("am "):
         is_lunar = True
         date_str = text.replace("am ", "").strip()
@@ -69,10 +59,14 @@ def process_date_input(text):
         dt = datetime.strptime(date_str, "%d/%m/%Y")
         if is_lunar:
             return get_solar_info_from_lunar(dt.day, dt.month, dt.year)
-        else:
-            return get_full_info_from_solar(dt.day, dt.month, dt.year)
+        return get_full_info_from_solar(dt.day, dt.month, dt.year)
     except Exception as e:
-        return f"Vui lòng nhập đúng định dạng:\n- `dd/mm/yyyy` (Dương -> Âm)\n- `am dd/mm/yyyy` (Âm -> Dương)\n\n(Lỗi: {str(e)})"
+        return (
+            "Vui lòng nhập đúng định dạng:\n"
+            "- `dd/mm/yyyy` (Dương -> Âm)\n"
+            "- `am dd/mm/yyyy` (Âm -> Dương)\n"
+            f"\n(Lỗi: {str(e)})"
+        )
 
 
 def process_callicham_input(text):
@@ -97,7 +91,12 @@ def process_callicham_input(text):
         payload = payload[3:].strip()
 
     if not payload:
-        return "Vui lòng nhập đúng dạng:\n- `callicham 10/3/2026`\n- `callicham am 10/3/2026`\n- `callicham ngay 10/3/2026`"
+        return (
+            "Vui lòng nhập đúng dạng:\n"
+            "- `callicham 10/3/2026`\n"
+            "- `callicham am 10/3/2026`\n"
+            "- `callicham ngay 10/3/2026`"
+        )
 
     try:
         dt = datetime.strptime(payload, "%d/%m/%Y")
@@ -105,4 +104,10 @@ def process_callicham_input(text):
             return get_solar_info_from_lunar(dt.day, dt.month, dt.year)
         return get_full_info_from_solar(dt.day, dt.month, dt.year)
     except Exception as e:
-        return f"Vui lòng nhập đúng dạng:\n- `callicham 10/3/2026`\n- `callicham am 10/3/2026`\n- `callicham ngay 10/3/2026`\n\n(Lỗi: {str(e)})"
+        return (
+            "Vui lòng nhập đúng dạng:\n"
+            "- `callicham 10/3/2026`\n"
+            "- `callicham am 10/3/2026`\n"
+            "- `callicham ngay 10/3/2026`\n"
+            f"\n(Lỗi: {str(e)})"
+        )
