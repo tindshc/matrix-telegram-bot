@@ -139,7 +139,9 @@ def _collect_text(node):
 
 def _render_node(node, path, recursive=False, depth=0):
     indent = "  " * depth
-    lines = [f"{indent}📄 <b>Mục {_escape_html(_format_path(path))}</b>: {_escape_html(node['title'])}"]
+    lines = [f"{indent}📄 <b>{_escape_html(node['title'])}</b>"]
+    if depth == 0:
+        lines.insert(0, f"🔎 <b>Vị trí:</b> {_escape_html(_format_path(path))}")
 
     body_lines = [line for line in node["body"] if line.strip()]
     if body_lines:
