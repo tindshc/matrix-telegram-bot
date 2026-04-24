@@ -7,7 +7,12 @@ from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, fil
 
 from utils.matrix import get_csv_info, process_matrix
 from utils.calendar import process_date_input
-from utils.procedure import get_procedure_info, process_procedure_markdown
+from utils.procedure import (
+    get_procedure_info,
+    process_procedure_markdown,
+    merge_procedure_documents,
+    count_procedure_sections,
+)
 from utils.db import db_set, db_get, db_list, db_delete
 
 # Initialize FastAPI
@@ -72,6 +77,50 @@ async def handle_markdown_logic(user_id, fname, formula, message):
     await message.reply_text(f"🔄 Đang xử lý trên file `{fname}`...", parse_mode='Markdown')
     file = await bot.get_file(file_id)
     content = requests.get(file.file_path).content.decode('utf-8')
+
+    formula = formula.strip()
+    formula_lower = formula.lower()
+
+    if formula_lower.startswith("them "):
+        source_name = formula[5:].strip().lower()
+        if source_name.endswith(".md"):
+            source_name = source_name[:-3]
+
+        if source_name == fname:
+            await message.reply_text("❌ Không thể gộp file vào chính nó.", parse_mode='Markdown')
+            return True
+
+        source_file_id = db_get(user_id, source_name)
+        if not source_file_id:
+            await message.reply_text(f"❌ Không tìm thấy file nguồn `{source_name}`.", parse_mode='Markdown')
+            return True
+
+        source_file = await bot.get_file(source_file_id)
+        source_content = requests.get(source_file.file_path).content.decode('utf-8')
+        merged_content = merge_procedure_documents(content, source_content)
+
+        merged_file = io.BytesIO(merged_content.encode('utf-8'))
+        merged_file.name = f"{fname}.md"
+        sent_msg = await bot.send_document(
+            chat_id=message.chat_id,
+            document=merged_file,
+            caption=f"📂 Đã gộp `{source_name}` vào `{fname}`",
+            disable_notification=True
+        )
+
+        db_set(user_id, fname, sent_msg.document.file_id)
+        db_delete(user_id, source_name)
+
+        base_count = count_procedure_sections(content)
+        extra_count = count_procedure_sections(source_content)
+        await message.reply_text(
+            f"✅ Đã gộp `{source_name}` vào `{fname}`.\n"
+            f"- Mục chính cũ: {base_count}\n"
+            f"- Mục chính thêm: {extra_count}\n"
+            f"- File nguồn `{source_name}` đã được xóa khỏi bộ nhớ.",
+            parse_mode='Markdown'
+        )
+        return True
 
     result_text, _ = process_procedure_markdown(content, formula)
     await message.reply_text(result_text, parse_mode='Markdown')

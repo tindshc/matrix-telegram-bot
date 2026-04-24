@@ -58,6 +58,27 @@ def _parse_markdown_document(content):
     return sections
 
 
+def count_procedure_sections(md_content):
+    """Return the number of top-level `#` sections in a markdown document."""
+    return len(_parse_markdown_document(md_content))
+
+
+def merge_procedure_documents(base_content, extra_content):
+    """
+    Merge two markdown procedure documents by appending the extra document.
+
+    Both documents keep their original `#` / `##` structure; the second file's
+    top-level sections will become the next numbered sections after upload.
+    """
+    base = (base_content or "").rstrip()
+    extra = (extra_content or "").lstrip()
+    if not base:
+        return extra
+    if not extra:
+        return base
+    return base + "\n\n" + extra
+
+
 def _strip_quotes(text):
     if (text.startswith("'") and text.endswith("'")) or (text.startswith('"') and text.endswith('"')):
         return text[1:-1]
@@ -109,7 +130,7 @@ def get_procedure_info(md_content):
     for i, section in enumerate(sections, 1):
         lines.append(f"{i}. {_escape_markdown(section['title'])}")
     lines.append("")
-    lines.append("Dùng `hien`, `tim ~...`, `xem 1`, hoặc `xem 3 1`.")
+    lines.append("Dùng `mdquytrinh hien`, `mdquytrinh tim ~...`, `mdquytrinh xem 1`, `mdquytrinh xem 3 1`, hoặc `mdquytrinh them <file.md>`.")
     return "\n".join(lines)
 
 
@@ -129,7 +150,7 @@ def process_procedure_markdown(md_content, formula):
         for i, section in enumerate(sections, 1):
             lines.append(f"{i}. {_escape_markdown(section['title'])}")
         lines.append("")
-        lines.append("Dùng `tim ~...` để tìm quy trình, `xem 1` hoặc `xem 3 1` để xem chi tiết.")
+        lines.append("Dùng `mdquytrinh tim ~...` để tìm quy trình, `mdquytrinh xem 1` hoặc `mdquytrinh xem 3 1` để xem chi tiết, `mdquytrinh them <file.md>` để gộp thêm file.")
         return "\n".join(lines), None
 
     if formula_lower.startswith("tim "):
@@ -179,4 +200,4 @@ def process_procedure_markdown(md_content, formula):
             return "❌ Số mục con không hợp lệ.", None
         return rendered, None
 
-    return "❌ Lệnh không hợp lệ cho file Markdown. Dùng `hien`, `tim ~...`, hoặc `xem 1`.", None
+    return "❌ Lệnh không hợp lệ cho file Markdown. Dùng `mdquytrinh hien`, `mdquytrinh tim ~...`, `mdquytrinh xem 1`, `mdquytrinh xem 3 1`, hoặc `mdquytrinh them <file.md>`.", None
