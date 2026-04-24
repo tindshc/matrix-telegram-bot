@@ -6,7 +6,7 @@ from telegram import Update, Bot, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 
 from utils.matrix import get_csv_info, process_matrix
-from utils.calendar import process_date_input
+from utils.calendar import process_date_input, process_callicham_input
 from utils.procedure import (
     get_procedure_info,
     process_procedure_markdown,
@@ -24,8 +24,7 @@ bot = Bot(token=TOKEN)
 
 def get_main_menu():
     keyboard = [
-        [InlineKeyboardButton("📊 Tính Matrix (CSV)", callback_data='mode_matrix')],
-        [InlineKeyboardButton("🌙 Xem Lịch Âm/Dương", callback_data='mode_calendar')],
+        [InlineKeyboardButton("ℹ️ Hướng dẫn tính năng", callback_data='mode_help')],
         [InlineKeyboardButton("📋 Danh sách file đã lưu", callback_data='mode_list')]
     ]
     return InlineKeyboardMarkup(keyboard)
@@ -140,14 +139,9 @@ async def webhook_handler(request: Request):
         query = update.callback_query
         await query.answer()
         
-        if query.data == 'mode_matrix':
+        if query.data == 'mode_help':
             await query.edit_message_text(
-                "📂 **Chế độ Matrix**\n\n- Gửi file CSV để lưu.\n- Xem cột theo số thứ tự: `tên_file hien`\n- Tìm theo số cột: `tên_file tim 5~'đồng yên'`\n- Xem một dòng: `tên_file xem 1`\n- Xóa file: `tên_file xoa` hoặc `/del tên_file`\n- Tính toán: `tên_file cột_mới = biểu_thức` (Sẽ tự lưu đè).\n- Lọc dữ liệu: `tên_file filter điều_kiện`.\n\nVD: `bctk tim 3=='HOACUONG'`",
-                parse_mode='Markdown'
-            )
-        elif query.data == 'mode_calendar':
-            await query.edit_message_text(
-                "📅 **Chế độ Xem Lịch**\n\n- Nhập `dd/mm/yyyy` (Dương -> Âm)\n- Nhập `am dd/mm/yyyy` (Âm -> Dương)",
+                "ℹ️ **Hướng dẫn tính năng**\n\n- Upload CSV để nạp file, ví dụ `bctk.csv`.\n- CSV dùng lệnh: `tên_file hien`, `tên_file tim ...`, `tên_file xem ...`, `tên_file xoa`.\n- Markdown quy trình dùng tên có tiền tố `md`, ví dụ `mdquytrinh.md`.\n- Quy trình Markdown dùng `mdquytrinh hien`, `mdquytrinh tim ~...`, `mdquytrinh xem 1 1`, `mdquytrinh them file.md`.\n- Lịch âm dương dùng `callicham 10/3/2026` hoặc `callicham am 10/3/2026`.\n- Quản lý file: `/list`, `/del <tên_file>`.\n\nVí dụ: `bctk tim 5~'hoacuong' and 1==2020`",
                 parse_mode='Markdown'
             )
         elif query.data == 'mode_list':
@@ -222,6 +216,11 @@ async def webhook_handler(request: Request):
                         return {"status": "ok"}
 
         # 3. Handle Date
+        cal_res = process_callicham_input(text)
+        if cal_res is not None:
+            await message.reply_text(cal_res, parse_mode='Markdown')
+            return {"status": "ok"}
+
         if text and "/" in text and len(text) >= 8:
             res = process_date_input(text)
             await message.reply_text(res)

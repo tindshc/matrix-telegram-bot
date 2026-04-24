@@ -73,3 +73,36 @@ def process_date_input(text):
             return get_full_info_from_solar(dt.day, dt.month, dt.year)
     except Exception as e:
         return f"Vui lòng nhập đúng định dạng:\n- `dd/mm/yyyy` (Dương -> Âm)\n- `am dd/mm/yyyy` (Âm -> Dương)\n\n(Lỗi: {str(e)})"
+
+
+def process_callicham_input(text):
+    """
+    Parses `callicham` commands for standalone lunar/solar conversion.
+    Supported forms:
+    - `callicham 10/3/2026`
+    - `callicham am 10/3/2026`
+    - `callicham ngay 10/3/2026`
+    """
+    raw = text.lower().strip()
+    if not raw.startswith("callicham"):
+        return None
+
+    payload = raw[len("callicham"):].strip()
+    is_lunar = False
+
+    if payload.startswith("ngay "):
+        payload = payload[5:].strip()
+    elif payload.startswith("am "):
+        is_lunar = True
+        payload = payload[3:].strip()
+
+    if not payload:
+        return "Vui lòng nhập đúng dạng:\n- `callicham 10/3/2026`\n- `callicham am 10/3/2026`\n- `callicham ngay 10/3/2026`"
+
+    try:
+        dt = datetime.strptime(payload, "%d/%m/%Y")
+        if is_lunar:
+            return get_solar_info_from_lunar(dt.day, dt.month, dt.year)
+        return get_full_info_from_solar(dt.day, dt.month, dt.year)
+    except Exception as e:
+        return f"Vui lòng nhập đúng dạng:\n- `callicham 10/3/2026`\n- `callicham am 10/3/2026`\n- `callicham ngay 10/3/2026`\n\n(Lỗi: {str(e)})"
