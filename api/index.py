@@ -7,6 +7,7 @@ from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, fil
 
 from utils.matrix import get_csv_info, process_matrix
 from utils.calendar import process_date_input
+from utils.procedure import get_procedure_info, process_procedure_markdown
 from utils.db import db_set, db_get, db_list, db_delete
 
 # Initialize FastAPI
@@ -59,6 +60,21 @@ async def handle_matrix_logic(user_id, fname, formula, message):
         db_set(user_id, fname, sent_msg.document.file_id)
         await message.reply_text(f"💾 Đã ghi đè dữ liệu mới vào tên file `{fname}`.", parse_mode='Markdown')
     
+    return True
+
+
+async def handle_markdown_logic(user_id, fname, formula, message):
+    """Core logic for structured Markdown workflow docs."""
+    file_id = db_get(user_id, fname)
+    if not file_id:
+        return False
+
+    await message.reply_text(f"🔄 Đang xử lý trên file `{fname}`...", parse_mode='Markdown')
+    file = await bot.get_file(file_id)
+    content = requests.get(file.file_path).content.decode('utf-8')
+
+    result_text, _ = process_procedure_markdown(content, formula)
+    await message.reply_text(result_text, parse_mode='Markdown')
     return True
 
 @app.post("/api/webhook")
@@ -138,15 +154,22 @@ async def webhook_handler(request: Request):
                 parts = text.split(" ", 1)
                 fname = parts[0].strip().lower()
                 formula = parts[1].strip()
+                if fname.startswith("md"):
+                    if await handle_markdown_logic(user_id, fname, formula, message):
+                        return {"status": "ok"}
                 if await handle_matrix_logic(user_id, fname, formula, message):
                     return {"status": "ok"}
             
             # Check if it's a Reply to CSV
             if message.reply_to_message and message.reply_to_message.document:
                 doc = message.reply_to_message.document
-                if doc.file_name.endswith('.csv'):
+                if doc.file_name.lower().endswith('.csv'):
                     fname = doc.file_name.lower().replace(".csv", "")
                     if await handle_matrix_logic(user_id, fname, text, message):
+                        return {"status": "ok"}
+                if doc.file_name.lower().endswith('.md'):
+                    fname = doc.file_name.lower().replace(".md", "")
+                    if await handle_markdown_logic(user_id, fname, text, message):
                         return {"status": "ok"}
 
         # 3. Handle Date
@@ -155,8 +178,8 @@ async def webhook_handler(request: Request):
             await message.reply_text(res)
             return {"status": "ok"}
 
-        # 4. Handle CSV Upload
-        if message.document and message.document.file_name.endswith('.csv'):
+        # 4. Handle file upload
+        if message.document and message.document.file_name.lower().endswith('.csv'):
             doc = message.document
             fname = doc.file_name.lower().replace(".csv", "")
             db_set(user_id, fname, doc.file_id)
@@ -165,6 +188,18 @@ async def webhook_handler(request: Request):
             file = await bot.get_file(doc.file_id)
             content = requests.get(file.file_path).content.decode('utf-8')
             info = get_csv_info(content)
+            await message.reply_text(info, parse_mode='Markdown')
+            return {"status": "ok"}
+
+        if message.document and message.document.file_name.lower().endswith('.md'):
+            doc = message.document
+            fname = doc.file_name.lower().replace(".md", "")
+            db_set(user_id, fname, doc.file_id)
+            await message.reply_text(f"🔄 Đã ghi nhớ file quy trình: `{fname}`", parse_mode='Markdown')
+
+            file = await bot.get_file(doc.file_id)
+            content = requests.get(file.file_path).content.decode('utf-8')
+            info = get_procedure_info(content)
             await message.reply_text(info, parse_mode='Markdown')
             return {"status": "ok"}
 
