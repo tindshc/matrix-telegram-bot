@@ -1,44 +1,49 @@
 import pandas as pd
 import io
-import re
 
 def process_matrix(csv_content, formula):
     """
-    Processes a CSV with a given formula.
-    Example formula: "cbr = sosinh * 1000 / dstb"
+    Processes a CSV with a given formula or filter.
+    Returns: (message_text, updated_csv_content_if_any)
     """
     try:
-        # Load CSV
         df = pd.read_csv(io.StringIO(csv_content))
         
-        # Clean formula: handle spaces and common math symbols
-        # formula is expected to be like "new_col = col1 * col2"
+        # 1. Handle Filter/Query
+        # Syntax: "filename filter condition"
+        if formula.lower().startswith("filter "):
+            condition = formula[7:].strip()
+            # Handle equality if only one '=' is used
+            if '==' not in condition and '=' in condition:
+                condition = condition.replace('=', '==')
+            
+            filtered_df = df.query(condition)
+            if filtered_df.empty:
+                return "❌ Không có dòng nào khớp với điều kiện lọc.", None
+            return f"🔍 **Kết quả lọc**:\n\n{filtered_df.to_markdown()}", None
+
+        # 2. Handle Calculation
+        # Syntax: "filename new_col = expr"
+        updated_csv = None
         if '=' in formula:
             target_col, expr = formula.split('=', 1)
             target_col = target_col.strip()
             expr = expr.strip()
             
-            # Use pandas eval for matrix-style calculation
             df[target_col] = df.eval(expr)
             
-            # Round if numeric
+            # Auto-round numeric
             if pd.api.types.is_numeric_dtype(df[target_col]):
                 df[target_col] = df[target_col].round(2)
+            
+            # Prepare updated CSV content
+            updated_csv = df.to_csv(index=False)
+            msg = f"✅ Đã tính toán và cập nhật cột `{target_col}`.\n\n{df.head(10).to_markdown()}"
+            return msg, updated_csv
         else:
-            # Just evaluate the expression and return as a series/result
+            # Just evaluate an expression without saving
             result = df.eval(formula)
-            return f"Kết quả:\n{result.to_string()}"
+            return f"📊 **Kết quả**:\n\n{result.to_string()}", None
 
-        # Return a summary or the first few rows
-        return df.head(10).to_markdown()
     except Exception as e:
-        return f"Lỗi tính toán: {str(e)}"
-
-def get_csv_info(csv_content):
-    """Returns column names and basic info of the CSV"""
-    try:
-        df = pd.read_csv(io.StringIO(csv_content))
-        cols = ", ".join([f"`{c}`" for c in df.columns])
-        return f"Đã nhận file CSV.\nCác cột: {cols}\nSố dòng: {len(df)}\nHãy nhập công thức để tính toán."
-    except Exception as e:
-        return f"Lỗi đọc file: {str(e)}"
+        return f"❌ Lỗi: {str(e)}", None
