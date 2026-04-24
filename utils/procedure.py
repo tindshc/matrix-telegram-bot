@@ -137,22 +137,28 @@ def _collect_text(node):
     return " ".join(part for part in parts if part).strip()
 
 
-def _render_node(node, path):
-    lines = [f"📄 <b>Mục {_escape_html(_format_path(path))}</b>: {_escape_html(node['title'])}"]
+def _render_node(node, path, recursive=False, depth=0):
+    indent = "  " * depth
+    lines = [f"{indent}📄 <b>Mục {_escape_html(_format_path(path))}</b>: {_escape_html(node['title'])}"]
 
     body_lines = [line for line in node["body"] if line.strip()]
     if body_lines:
         lines.append("")
-        lines.append("<b>Nội dung:</b>")
+        lines.append(f"{indent}<b>Nội dung:</b>")
         for line in body_lines:
-            lines.append(f"• {_escape_html(_normalize_bullet_line(line))}")
+            lines.append(f"{indent}• {_escape_html(_normalize_bullet_line(line))}")
 
     if node["children"]:
         lines.append("")
-        lines.append("<b>Mục con:</b>")
-        for i, child in enumerate(node["children"], 1):
-            child_path = path + [i]
-            lines.append(f"{i}. {_escape_html(child['title'])}")
+        if recursive:
+            lines.append(f"{indent}<b>Chi tiết bên dưới:</b>")
+            for i, child in enumerate(node["children"], 1):
+                child_path = path + [i]
+                lines.append(_render_node(child, child_path, recursive=True, depth=depth + 1))
+        else:
+            lines.append(f"{indent}<b>Mục con:</b>")
+            for i, child in enumerate(node["children"], 1):
+                lines.append(f"{indent}{i}. {_escape_html(child['title'])}")
     return "\n".join(lines)
 
 
@@ -271,7 +277,7 @@ def process_procedure_markdown(md_content, formula):
         if node is None:
             return "❌ Số mục không hợp lệ.", None
 
-        rendered = _render_node(node, path)
+        rendered = _render_node(node, path, recursive=True)
         return rendered, None
 
     return (
