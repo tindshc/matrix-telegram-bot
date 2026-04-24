@@ -1,15 +1,33 @@
 from vnlunar import get_full_info
-from vncalendar import VanSu
+import vncalendar
 from datetime import datetime
 
 def get_solar_info_from_lunar(day, month, year, leap=0):
     """
     Converts Lunar date to Solar and returns full info.
+    Attempts multiple import styles for vncalendar.
     """
     try:
-        # Convert Lunar to Solar
-        s_day, s_month, s_year = VanSu.SolarAndLunar.convertLunar2Solar(day, month, year, leap)
+        # Try different ways to call convertLunar2Solar based on library version
+        s_day, s_month, s_year = None, None, None
         
+        try:
+            # Style 1: Direct from VanSu
+            from vncalendar import VanSu
+            s_day, s_month, s_year = VanSu.convertLunar2Solar(day, month, year, leap)
+        except AttributeError:
+            try:
+                # Style 2: Nested SolarAndLunar
+                from vncalendar import VanSu
+                s_day, s_month, s_year = VanSu.SolarAndLunar.convertLunar2Solar(day, month, year, leap)
+            except AttributeError:
+                # Style 3: Direct from vncalendar
+                from vncalendar import SolarAndLunar
+                s_day, s_month, s_year = SolarAndLunar.convertLunar2Solar(day, month, year, leap)
+        
+        if s_day is None:
+            raise Exception("Không tìm thấy hàm chuyển đổi trong thư viện vncalendar.")
+            
         # Now get full info from that solar date
         return get_full_info_from_solar(s_day, s_month, s_year)
     except Exception as e:
@@ -23,12 +41,12 @@ def get_full_info_from_solar(day, month, year):
         info = get_full_info(day, month, year)
         
         res = []
-        res.append(f"☀️ Dương lịch: {day}/{month}/{year}")
-        res.append(f"🌙 Âm lịch: {info['lunar']['day']}/{info['lunar']['month']}/{info['lunar']['year']} ({'Nhuận' if info['is_leap'] else 'Thường'})")
-        res.append(f"✨ Năm: {info['can_chi']['year']}")
-        res.append(f"🎋 Tháng: {info['can_chi']['month']}")
-        res.append(f"🧧 Ngày: {info['can_chi']['day']}")
-        res.append(f"🌡️ Tiết khí: {info['solar_term']}")
+        res.append(f"☀️ **Ngày Dương lịch**: {day}/{month}/{year}")
+        res.append(f"🌙 **Ngày Âm lịch**: {info['lunar']['day']}/{info['lunar']['month']}/{info['lunar']['year']} ({'Nhuận' if info['is_leap'] else 'Thường'})")
+        res.append(f"✨ **Năm**: {info['can_chi']['year']}")
+        res.append(f"🎋 **Tháng**: {info['can_chi']['month']}")
+        res.append(f"🧧 **Ngày**: {info['can_chi']['day']}")
+        res.append(f"🌡️ **Tiết khí**: {info['solar_term']}")
         
         return "\n".join(res)
     except Exception as e:
@@ -37,9 +55,6 @@ def get_full_info_from_solar(day, month, year):
 def process_date_input(text):
     """
     Parses input and decides if it's Solar or Lunar.
-    Syntax: 
-    - 24/04/2026 (Solar -> Lunar)
-    - am 24/04/2026 (Lunar -> Solar)
     """
     text = text.lower().strip()
     is_lunar = False
@@ -56,5 +71,5 @@ def process_date_input(text):
             return get_solar_info_from_lunar(dt.day, dt.month, dt.year)
         else:
             return get_full_info_from_solar(dt.day, dt.month, dt.year)
-    except:
-        return "Vui lòng nhập đúng định dạng:\n- `dd/mm/yyyy` (Dương -> Âm)\n- `am dd/mm/yyyy` (Âm -> Dương)"
+    except Exception as e:
+        return f"Vui lòng nhập đúng định dạng:\n- `dd/mm/yyyy` (Dương -> Âm)\n- `am dd/mm/yyyy` (Âm -> Dương)\n\n(Lỗi: {str(e)})"
