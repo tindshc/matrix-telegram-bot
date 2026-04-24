@@ -1,0 +1,7 @@
+pandas
+vnlunar
+python-telegram-bot
+fastapi
+uvicorn
+python-multipart
+requests
