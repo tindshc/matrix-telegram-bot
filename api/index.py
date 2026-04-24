@@ -33,6 +33,9 @@ async def webhook_handler(request: Request):
     data = await request.json()
     update = Update.de_json(data, bot)
     
+    if not update.effective_user:
+        return {"status": "ok"}
+        
     user_id = update.effective_user.id
 
     if update.callback_query:
@@ -84,15 +87,14 @@ async def webhook_handler(request: Request):
         # 2. Handle Matrix by Name (e.g. "bctk cbr=...")
         if text and " " in text:
             parts = text.split(" ", 1)
-            fname = parts[0].strip()
+            fname = parts[0].strip().lower()
             formula = parts[1].strip()
             
             file_id = db_get(user_id, fname)
             if file_id:
                 await message.reply_text(f"🔄 Đang tính toán trên file `{fname}`...", parse_mode='Markdown')
                 file = await bot.get_file(file_id)
-                file_url = f"https://api.telegram.org/file/bot{TOKEN}/{file.file_path}"
-                content = requests.get(file_url).content.decode('utf-8')
+                content = requests.get(file.file_path).content.decode('utf-8')
                 result = process_matrix(content, formula)
                 await message.reply_text(f"✅ **Kết quả ({fname})**:\n\n{result}", parse_mode='Markdown')
                 return {"status": "ok"}
@@ -106,7 +108,7 @@ async def webhook_handler(request: Request):
         # 4. Handle CSV Upload (Save to Redis)
         if message.document and message.document.file_name.endswith('.csv'):
             doc = message.document
-            fname = doc.file_name.replace(".csv", "").lower()
+            fname = doc.file_name.lower().replace(".csv", "")
             
             # Save mapping in Redis
             db_set(user_id, fname, doc.file_id)
@@ -114,8 +116,8 @@ async def webhook_handler(request: Request):
             await message.reply_text(f"🔄 Đã đọc file và lưu tên: `{fname}`", parse_mode='Markdown')
             
             file = await bot.get_file(doc.file_id)
-            file_url = f"https://api.telegram.org/file/bot{TOKEN}/{file.file_path}"
-            content = requests.get(file_url).content.decode('utf-8')
+            # Fix: file.file_path is already the full URL in python-telegram-bot v20
+            content = requests.get(file.file_path).content.decode('utf-8')
             info = get_csv_info(content)
             
             await message.reply_text(
@@ -130,8 +132,7 @@ async def webhook_handler(request: Request):
             if doc.file_name.endswith('.csv'):
                 await message.reply_text("🔄 Đang tính toán trên file này...")
                 file = await bot.get_file(doc.file_id)
-                file_url = f"https://api.telegram.org/file/bot{TOKEN}/{file.file_path}"
-                content = requests.get(file_url).content.decode('utf-8')
+                content = requests.get(file.file_path).content.decode('utf-8')
                 result = process_matrix(content, text)
                 await message.reply_text(f"✅ **Kết quả**:\n\n{result}", parse_mode='Markdown')
                 return {"status": "ok"}
