@@ -365,9 +365,6 @@ def _task_row_display(row, row_number):
     parts = []
     if han:
         parts.append(han)
-        rel = _task_deadline_relative_label(han)
-        if rel:
-            parts.append(rel)
     if phong:
         parts.append(phong)
     if diadiem:
@@ -378,6 +375,9 @@ def _task_row_display(row, row_number):
         parts.append(trangthai)
     if parts:
         label += f" ({' | '.join(parts)})"
+    rel = _task_deadline_relative_label(han)
+    if rel:
+        label += f" - {rel}"
     if ghichu:
         label += f"\n  - {ghichu}"
     return label
@@ -399,28 +399,8 @@ def format_task_list(df, only_open=True):
 
     today = datetime.now().strftime("%d/%m/%Y")
     lines = [f"📋 **Danh sách việc** - hôm nay `{today}`:"]
-    rows = []
-    for _, row in work_df.iterrows():
-        section_order, section_label, deadline = _task_deadline_section(row.get("han", ""))
-        rows.append((section_order, section_label, deadline, row))
-    rows.sort(key=lambda item: (item[0], item[2] or datetime.max))
-
-    section_titles = {
-        "Hôm nay": "🟢 Hôm nay",
-        "Ngày mai": "🟡 Ngày mai",
-        "Trong 7 ngày": "🔵 Trong 7 ngày",
-        "Xa hơn": "⚪ Xa hơn",
-        "Quá hạn": "🔴 Quá hạn",
-        "Chưa có hạn": "⚪ Chưa có hạn",
-    }
-
-    current_section = None
     visible_index = 0
-    for _, section_label, _, row in rows:
-        if section_label != current_section:
-            current_section = section_label
-            lines.append("")
-            lines.append(section_titles.get(section_label, section_label))
+    for _, row in work_df.iterrows():
         visible_index += 1
         lines.append(_task_row_display(row, visible_index))
     return "\n".join(lines)
