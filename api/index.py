@@ -458,7 +458,6 @@ async def _start_job_input_session(user_id, fname, message, department=None):
     state = {"fname": fname, "index": 0, "values": {}, "department": department}
     db_set_state(user_id, _job_state_key(fname), json.dumps(state, ensure_ascii=False))
 
-    await message.reply_text(job_help_text(fname))
     selection_options = None
     if fields[0] == "nguoi":
         selection_options = await _job_member_options(user_id, department)
