@@ -179,6 +179,7 @@ def _job_input_prompt(fname, df, field_name, position, total, department=None, s
 
     if field_name == "han":
         lines.append("Nhập ngày, ví dụ: `28/4` hoặc `28/4/2026`.")
+        lines.append("Có thể thêm giờ, ví dụ: `28/4 6h00` hoặc `am 10/3 6h00`.")
         lines.append("Nếu là âm lịch, gõ `am 10/3` hoặc `am 10/3/2026`.")
         lines.append("Gõ /back để quay lại bước trước, /cancel để hủy.")
         return "\n".join(lines)

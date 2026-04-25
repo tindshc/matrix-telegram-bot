@@ -65,46 +65,61 @@ def _parse_date_token(token: str, lunar: bool = False):
     return f"{day:02d}/{month:02d}/{year:04d}"
 
 
-def parse_job_date_text(text: str):
-    raw = str(text).strip()
-    if not raw:
+def _parse_time_token(token: str):
+    token = str(token).strip().lower()
+    match = re.match(r"^(\d{1,2})(?:[:h.](\d{2}))?$", token)
+    if not match:
         return None
 
-    lunar = False
-    if raw.lower().startswith("am "):
-        lunar = True
-        raw = raw[3:].strip()
+    hour = int(match.group(1))
+    minute = int(match.group(2) or 0)
+    if hour < 0 or hour > 23 or minute < 0 or minute > 59:
+        return None
+    return f"{hour:02d}:{minute:02d}"
 
-    return _parse_date_token(raw, lunar=lunar)
+
+def _parse_date_with_optional_time(text: str):
+    raw = str(text).strip()
+    if not raw:
+        return None, 0
+
+    lunar = False
+    tokens = raw.split()
+    if tokens and tokens[0].lower() == "am":
+        lunar = True
+        tokens = tokens[1:]
+
+    if not tokens:
+        return None, 0
+
+    date_value = _parse_date_token(tokens[0], lunar=lunar)
+    if not date_value:
+        return None, 0
+
+    consumed = 1 + (1 if lunar else 0)
+    if len(tokens) > 1:
+        time_value = _parse_time_token(tokens[1])
+        if time_value:
+            date_value = f"{date_value} {time_value}"
+            consumed += 1
+
+    return date_value, consumed
+
+
+def parse_job_date_text(text: str):
+    date_value, _ = _parse_date_with_optional_time(text)
+    return date_value
 
 
 def parse_job_task_payload(payload: str, known_depts=None):
     text = str(payload).strip()
     known_depts = {str(x).lower() for x in (known_depts or []) if str(x).strip()}
-    lunar = False
-
-    if text.lower().startswith("am "):
-        lunar = True
-        text = text[3:].strip()
 
     tokens = text.split()
     if not tokens:
         return None, None
 
-    date_value = None
-    date_tokens = 0
-    if tokens:
-        candidate = tokens[0]
-        if candidate.lower() == "am" and len(tokens) >= 2:
-            lunar = True
-            candidate = tokens[1]
-            date_tokens = 2
-        else:
-            date_tokens = 1
-
-        date_value = _parse_date_token(candidate, lunar=lunar)
-        if date_value is None and len(tokens) >= 2 and tokens[0].lower() == "am":
-            date_value = _parse_date_token(tokens[1], lunar=True)
+    date_value, date_tokens = _parse_date_with_optional_time(text)
 
     if date_value is None:
         return None, None
@@ -252,14 +267,15 @@ def job_help_text(fname: str):
         )
 
     return "\n".join(
-        [
-            "📝 **Cách dùng jviec**:",
-            "- `jviec cachnhap` để xem hướng dẫn nhập trước khi gõ dữ liệu.",
-            "- `jviec giao 28/4 Báo cáo ctv ds` để giao việc; nếu bỏ năm thì bot tự hiểu là năm hiện tại.",
-            "- Nếu có địa điểm, hãy nhập theo mẫu `jviec giao am 10/3 UBND phường - Chạp mã nhà thờ lớn gd`.",
-            "- Nếu không có địa điểm, có thể chèn `-` ngay sau ngày, ví dụ `jviec giao am 10/3 - Chạp mã nhà thờ lớn gd`.",
-            "- `jviec giao am 10/3 Chạp mã nhà thờ lớn gd` để nhập ngày âm, bot sẽ đổi sang ngày dương.",
-            "- `jviec hien` để xem các việc đang chờ.",
+            [
+                "📝 **Cách dùng jviec**:",
+                "- `jviec cachnhap` để xem hướng dẫn nhập trước khi gõ dữ liệu.",
+                "- `jviec giao 28/4 Báo cáo ctv ds` để giao việc; nếu bỏ năm thì bot tự hiểu là năm hiện tại.",
+                "- Có thể thêm giờ sau ngày, ví dụ `jviec giao am 10/3 6h00 UBND phường - Chạp mã nhà thờ lớn gd`.",
+                "- Nếu có địa điểm, hãy nhập theo mẫu `jviec giao am 10/3 6h00 UBND phường - Chạp mã nhà thờ lớn gd`.",
+                "- Nếu không có địa điểm, có thể chèn `-` ngay sau ngày hoặc giờ, ví dụ `jviec giao am 10/3 6h00 - Chạp mã nhà thờ lớn gd`.",
+                "- `jviec giao am 10/3 Chạp mã nhà thờ lớn gd` để nhập ngày âm, bot sẽ đổi sang ngày dương.",
+                "- `jviec hien` để xem các việc đang chờ.",
             "- `jviec xem` để xem toàn bộ, `jviec xem 1` để xem chi tiết việc số 1.",
             "- `jviec xong 1` để đánh dấu xong.",
             "- `jviec xoa 1` để xóa việc số 1.",
