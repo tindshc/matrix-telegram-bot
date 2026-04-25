@@ -117,6 +117,19 @@ def _is_task_done_value(value):
     return text in {"done", "xong", "completed", "complete", "hoan thanh", "hoàn thành"}
 
 
+def _ordered_task_df(df, only_open=True):
+    work_df = ensure_job_schema(df, "jviec")
+    if only_open and "trangthai" in work_df.columns:
+        mask = ~work_df["trangthai"].apply(_is_task_done_value)
+        work_df = work_df[mask]
+
+    if not work_df.empty and "han" in work_df.columns:
+        work_df = work_df.copy()
+        work_df["_sort"] = work_df.apply(_task_sort_key, axis=1)
+        work_df = work_df.sort_values("_sort").drop(columns=["_sort"])
+    return work_df
+
+
 def _parse_date_token(token: str, lunar: bool = False):
     token = str(token).strip()
     match = re.match(r"^(\d{1,2})/(\d{1,2})(?:/(\d{4}))?$", token)
@@ -389,15 +402,7 @@ def _task_row_display(row, row_number):
 
 
 def format_task_list(df, only_open=True):
-    work_df = ensure_job_schema(df, "jviec")
-    if only_open and "trangthai" in work_df.columns:
-        mask = ~work_df["trangthai"].apply(_is_task_done_value)
-        work_df = work_df[mask]
-
-    if not work_df.empty and "han" in work_df.columns:
-        work_df = work_df.copy()
-        work_df["_sort"] = work_df.apply(_task_sort_key, axis=1)
-        work_df = work_df.sort_values("_sort").drop(columns=["_sort"])
+    work_df = _ordered_task_df(df, only_open=only_open)
 
     if work_df.empty:
         return "📭 Chưa có việc nào."
@@ -412,7 +417,7 @@ def format_task_list(df, only_open=True):
 
 
 def format_task_detail(df, row_number):
-    work_df = ensure_job_schema(df, "jviec")
+    work_df = _ordered_task_df(df, only_open=False)
     if row_number < 1 or row_number > len(work_df):
         return None
     return _format_row_vertical(work_df, row_number)
@@ -452,38 +457,34 @@ def mark_task_done(df, row_number):
 
 
 def mark_task_done_visible(df, visible_number, only_open=True):
-    work_df = ensure_job_schema(df, "jviec")
-    if only_open and "trangthai" in work_df.columns:
-        open_mask = ~work_df["trangthai"].apply(_is_task_done_value)
-        visible_indices = list(work_df[open_mask].index)
-    else:
-        visible_indices = list(work_df.index)
+    work_df = _ordered_task_df(df, only_open=only_open)
 
-    if visible_number < 1 or visible_number > len(visible_indices):
+    if visible_number < 1 or visible_number > len(work_df):
         return None, "❌ Số việc không hợp lệ."
 
-    row_idx = visible_indices[visible_number - 1]
-    work_df.loc[row_idx, "trangthai"] = "done"
+    row = work_df.iloc[visible_number - 1].copy()
+    row["trangthai"] = "done"
     if "ghichu" in work_df.columns:
-        note = str(work_df.loc[row_idx, "ghichu"]).strip()
+        note = str(row.get("ghichu", "")).strip()
         stamp = datetime.now().strftime("%d/%m/%Y")
-        work_df.loc[row_idx, "ghichu"] = f"{note} | xong {stamp}".strip(" |")
-    return work_df, None
+        row["ghichu"] = f"{note} | xong {stamp}".strip(" |")
+
+    updated = ensure_job_schema(df, "jviec").copy()
+    row_id = work_df.iloc[visible_number - 1].name
+    for col in updated.columns:
+        if col in row.index:
+            updated.loc[row_id, col] = row[col]
+    return updated, None
 
 
 def delete_task_visible(df, visible_number, only_open=True):
-    work_df = ensure_job_schema(df, "jviec")
-    if only_open and "trangthai" in work_df.columns:
-        open_mask = ~work_df["trangthai"].apply(_is_task_done_value)
-        visible_indices = list(work_df[open_mask].index)
-    else:
-        visible_indices = list(work_df.index)
+    work_df = _ordered_task_df(df, only_open=only_open)
 
-    if visible_number < 1 or visible_number > len(visible_indices):
+    if visible_number < 1 or visible_number > len(work_df):
         return None, "❌ Số việc không hợp lệ."
 
-    row_idx = visible_indices[visible_number - 1]
-    return work_df.drop(index=row_idx).reset_index(drop=True), None
+    row_idx = work_df.iloc[visible_number - 1].name
+    return ensure_job_schema(df, "jviec").drop(index=row_idx).reset_index(drop=True), None
 
 
 def add_task(df, data):
