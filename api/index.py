@@ -523,10 +523,10 @@ async def _continue_job_input_session(user_id, text, message):
         await message.reply_text(f"❌ Không tìm thấy file `{fname}`.", parse_mode='Markdown')
         return True
 
-    department = state.get("department") or values.get("phong")
-    fields = _job_input_fields(fname, department=department)
     index = int(state.get("index", 0))
     values = state.get("values", {})
+    department = state.get("department") or values.get("phong")
+    fields = _job_input_fields(fname, department=department)
     if index >= len(fields):
         db_delete_state(user_id, _job_state_key(""))
         return False
