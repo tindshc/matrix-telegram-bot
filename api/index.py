@@ -763,7 +763,12 @@ async def handle_job_logic(user_id, fname, formula, message):
         if error:
             await message.reply_text(error, parse_mode='Markdown')
             return True
-        await _save_dataframe_file(user_id, fname, updated, message, JOB_KIND, "📂 Đã lưu bản cập nhật của")
+        await message.reply_text(f"✅ Đã nhận `xong {parts[1]}`.", parse_mode='Markdown')
+        try:
+            await _save_dataframe_file(user_id, fname, updated, message, JOB_KIND, "📂 Đã lưu bản cập nhật của")
+        except Exception:
+            await message.reply_text("❌ Không lưu được thay đổi của việc.", parse_mode='Markdown')
+            return True
         await message.reply_text(format_task_list(updated, only_open=True), parse_mode='Markdown')
         return True
 
@@ -776,7 +781,12 @@ async def handle_job_logic(user_id, fname, formula, message):
         if error:
             await message.reply_text(error, parse_mode='Markdown')
             return True
-        await _save_dataframe_file(user_id, fname, updated, message, JOB_KIND, "📂 Đã lưu bản cập nhật của")
+        await message.reply_text(f"✅ Đã nhận `xoa {parts[1]}`.", parse_mode='Markdown')
+        try:
+            await _save_dataframe_file(user_id, fname, updated, message, JOB_KIND, "📂 Đã lưu bản cập nhật của")
+        except Exception:
+            await message.reply_text("❌ Không lưu được thay đổi của việc.", parse_mode='Markdown')
+            return True
         await message.reply_text(format_task_list(updated, only_open=True), parse_mode='Markdown')
         return True
 
