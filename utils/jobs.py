@@ -427,6 +427,16 @@ def _task_row_summary(row, row_number):
     return " | ".join(parts)
 
 
+def _task_row_done_summary(row, row_number):
+    viec = _clean_text(row.get("viec", ""))
+    han = _clean_text(row.get("han", ""))
+    label = f"{row_number}. {viec}"
+    if han:
+        label += f" ({han})"
+    label += " - done"
+    return label
+
+
 def format_task_list(df, only_open=True):
     work_df = _ordered_task_df(df, only_open=only_open)
 
@@ -495,7 +505,7 @@ def complete_task_visible(df, visible_number, only_open=True):
     updated = ensure_job_schema(df, "jviec").copy()
     updated.loc[row_idx, "trangthai"] = "done"
     done_row = updated.loc[row_idx].copy()
-    row_text = _task_row_summary(done_row, visible_number)
+    row_text = _task_row_done_summary(done_row, visible_number)
     return updated, row_text, None
 
 
