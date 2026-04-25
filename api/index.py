@@ -119,6 +119,15 @@ def _csv_is_select_field(field_name):
     return name.startswith("s") and name not in {"sotien"}
 
 
+def _csv_selection_options(df, field_name):
+    options = _unique_nonempty_values(df[field_name])
+    if _csv_is_select_field(field_name):
+        return options
+    if len(options) <= 8:
+        return options
+    return []
+
+
 def _csv_input_prompt(df, field_name, position, total):
     values = _unique_nonempty_values(df[field_name])
     lines = [f"Bước {position}/{total}: nhập `{field_name}`"]
@@ -128,9 +137,10 @@ def _csv_input_prompt(df, field_name, position, total):
         lines.append("Gõ /back để quay lại bước trước, /cancel để hủy.")
         return "\n".join(lines)
 
-    if _csv_is_select_field(field_name) or (values and len(values) <= 8):
+    options = _csv_selection_options(df, field_name)
+    if options:
         lines.append("Chọn số hoặc gõ giá trị mới:")
-        for idx, value in enumerate(values, 1):
+        for idx, value in enumerate(options, 1):
             lines.append(f"{idx}. {value}")
         lines.append("Gõ số để chọn, hoặc gõ giá trị mới.")
         lines.append("Gõ /back để quay lại bước trước, /cancel để hủy.")
@@ -408,8 +418,8 @@ async def _continue_csv_input_session(user_id, text, message):
             await message.reply_text(_csv_input_prompt(df, field_name, index + 1, len(fields)))
             return True
         value = parsed_amount
-    elif _csv_is_select_field(field_name) or field_lower in {"muc", "thuchi"}:
-        options = _unique_nonempty_values(df[field_name])
+    else:
+        options = _csv_selection_options(df, field_name)
         if answer.isdigit():
             opt_index = int(answer) - 1
             if 0 <= opt_index < len(options):

@@ -74,6 +74,15 @@ def _is_select_column(column_name):
     return name.startswith("s") and name not in {"sotien"}
 
 
+def _selection_options_for_field(df, column_name):
+    options = _unique_nonempty_values(df[column_name])
+    if _is_select_column(column_name):
+        return options
+    if len(options) <= 8:
+        return options
+    return []
+
+
 def _format_csv_input_help(df):
     lines = [
         "📝 **Cách nhập CSV**:",
@@ -87,14 +96,9 @@ def _format_csv_input_help(df):
         "- Với file có cột `muc`, `thuchi`, `sotien`, ba trường này là bắt buộc khi `nhap`.",
         "- Dạng ngắn của `nhap` sẽ đi theo thứ tự cột thật của file.",
     ]
-    if "muc" in {str(c).casefold() for c in df.columns}:
-        lines.append("")
-        lines.append(_format_selection_help(df, _resolve_column_name(list(df.columns), "muc"), 1))
-    if "thuchi" in {str(c).casefold() for c in df.columns}:
-        lines.append("")
-        lines.append(_format_selection_help(df, _resolve_column_name(list(df.columns), "thuchi"), 2))
     for idx, col in enumerate(df.columns, 1):
-        if _is_select_column(col):
+        options = _selection_options_for_field(df, col)
+        if options:
             lines.append("")
             lines.append(_format_selection_help(df, col, idx))
     return "\n".join(lines)
@@ -275,10 +279,10 @@ def _append_row(df, row_data):
             if parsed_amount is None:
                 return None, f"❌ Cột `sotien` phải là số, ví dụ `15` hoặc `15,5`."
             new_row[col_name] = parsed_amount
-        elif _is_select_column(col_name) or str(col_name).casefold() in {"muc", "thuchi"}:
+        else:
             raw_value = str(value).strip()
-            options = _unique_nonempty_values(df[col_name])
-            if raw_value.isdigit():
+            options = _selection_options_for_field(df, col_name)
+            if raw_value.isdigit() and options:
                 opt_index = int(raw_value) - 1
                 if 0 <= opt_index < len(options):
                     new_row[col_name] = options[opt_index]
@@ -286,8 +290,6 @@ def _append_row(df, row_data):
                     new_row[col_name] = raw_value
             else:
                 new_row[col_name] = raw_value
-        else:
-            new_row[col_name] = value
 
     if _has_transaction_schema(df):
         for field in _transaction_required_fields():
@@ -332,9 +334,9 @@ def _update_row(df, row_number, row_data):
             work_df.loc[target_index, col_name] = parsed_amount
             continue
 
-        if _is_select_column(col_name) or str(col_name).casefold() in {"muc", "thuchi"}:
+        options = _selection_options_for_field(work_df, col_name)
+        if options:
             raw_value = str(value).strip()
-            options = _unique_nonempty_values(work_df[col_name])
             if raw_value.isdigit():
                 opt_index = int(raw_value) - 1
                 if 0 <= opt_index < len(options):
