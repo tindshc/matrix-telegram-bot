@@ -331,8 +331,6 @@ async def _start_csv_input_session(user_id, fname, message):
     state = {"fname": fname, "index": 0, "values": {}}
     db_set_state(user_id, _csv_input_state_key(fname), json.dumps(state, ensure_ascii=False))
 
-    help_text, _ = process_matrix(content, "nhap")
-    await message.reply_text(help_text)
     await message.reply_text(_csv_input_prompt(df, fields[0], 1, len(fields)))
     return True
 
