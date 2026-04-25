@@ -85,6 +85,26 @@ def _task_deadline_relative_label(value):
     return f"quá hạn {abs(delta_days)} ngày"
 
 
+def _task_deadline_section(value):
+    deadline = _parse_task_deadline(value)
+    if not deadline:
+        return 5, "Chưa có hạn", None
+
+    today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    target = deadline.replace(hour=0, minute=0, second=0, microsecond=0)
+    delta_days = (target - today).days
+
+    if delta_days == 0:
+        return 0, "Hôm nay", deadline
+    if delta_days == 1:
+        return 1, "Ngày mai", deadline
+    if delta_days > 1 and delta_days <= 7:
+        return 2, "Trong 7 ngày", deadline
+    if delta_days > 7:
+        return 3, "Xa hơn", deadline
+    return 4, "Quá hạn", deadline
+
+
 def _task_sort_key(row):
     deadline = _parse_task_deadline(row.get("han", ""))
     if deadline is None:
@@ -379,8 +399,30 @@ def format_task_list(df, only_open=True):
 
     today = datetime.now().strftime("%d/%m/%Y")
     lines = [f"📋 **Danh sách việc** - hôm nay `{today}`:"]
-    for idx, (_, row) in enumerate(work_df.iterrows(), 1):
-        lines.append(_task_row_display(row, idx))
+    rows = []
+    for _, row in work_df.iterrows():
+        section_order, section_label, deadline = _task_deadline_section(row.get("han", ""))
+        rows.append((section_order, section_label, deadline, row))
+    rows.sort(key=lambda item: (item[0], item[2] or datetime.max))
+
+    section_titles = {
+        "Hôm nay": "🟢 Hôm nay",
+        "Ngày mai": "🟡 Ngày mai",
+        "Trong 7 ngày": "🔵 Trong 7 ngày",
+        "Xa hơn": "⚪ Xa hơn",
+        "Quá hạn": "🔴 Quá hạn",
+        "Chưa có hạn": "⚪ Chưa có hạn",
+    }
+
+    current_section = None
+    visible_index = 0
+    for _, section_label, _, row in rows:
+        if section_label != current_section:
+            current_section = section_label
+            lines.append("")
+            lines.append(section_titles.get(section_label, section_label))
+        visible_index += 1
+        lines.append(_task_row_display(row, visible_index))
     return "\n".join(lines)
 
 
