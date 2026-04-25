@@ -72,18 +72,19 @@ def _csv_input_prompt(df, field_name, position, total):
 
     if str(field_name).casefold() == "sotien":
         lines.append("Nhập số, ví dụ: 75 hoặc 15,5")
-        lines.append("Gõ /cancel để hủy.")
+        lines.append("Gõ /back để quay lại bước trước, /cancel để hủy.")
         return "\n".join(lines)
 
     if values and len(values) <= 8:
         lines.append("Chọn số hoặc gõ giá trị mới:")
         for idx, value in enumerate(values, 1):
             lines.append(f"{idx}. {value}")
-        lines.append("Gõ /cancel để hủy.")
+        lines.append("Gõ số để chọn, hoặc gõ giá trị mới.")
+        lines.append("Gõ /back để quay lại bước trước, /cancel để hủy.")
         return "\n".join(lines)
 
     lines.append("Nhập nội dung.")
-    lines.append("Gõ /cancel để hủy.")
+    lines.append("Gõ /back để quay lại bước trước, /cancel để hủy.")
     return "\n".join(lines)
 
 @app.get("/")
@@ -180,6 +181,23 @@ async def _continue_csv_input_session(user_id, text, message):
         await message.reply_text(f"🛑 Đã hủy nhập cho file `{fname}`.", parse_mode='Markdown')
         return True
 
+    if answer.lower() in {"/back", "back", "quaylai", "quay lại"}:
+        current_index = int(state.get("index", 0))
+        if current_index <= 0:
+            await message.reply_text("ℹ️ Đây là bước đầu tiên, không thể quay lại.")
+            return True
+
+        current_index -= 1
+        values = state.get("values", {})
+        prev_field = fields[current_index]
+        values.pop(prev_field, None)
+        state["index"] = current_index
+        state["values"] = values
+        db_set_state(user_id, _csv_input_state_key(""), json.dumps(state, ensure_ascii=False))
+        await message.reply_text(f"↩️ Đã quay lại bước `{prev_field}`.", parse_mode='Markdown')
+        await message.reply_text(_csv_input_prompt(df, prev_field, current_index + 1, len(fields)))
+        return True
+
     file_id = db_get(user_id, fname)
     if not file_id:
         db_delete_state(user_id, _csv_input_state_key(""))
@@ -222,6 +240,7 @@ async def _continue_csv_input_session(user_id, text, message):
     if state["index"] < len(fields):
         db_set_state(user_id, _csv_input_state_key(""), json.dumps(state, ensure_ascii=False))
         next_field = fields[state["index"]]
+        await message.reply_text(f"✅ Đã nhận `{field_name}` = `{value}`.", parse_mode='Markdown')
         await message.reply_text(_csv_input_prompt(df, next_field, state["index"] + 1, len(fields)))
         return True
 
@@ -246,6 +265,7 @@ async def _continue_csv_input_session(user_id, text, message):
     db_set_kind(user_id, fname, "csv")
     db_delete_state(user_id, _csv_input_state_key(""))
 
+    await message.reply_text(f"✅ Đã nhận `{field_name}` = `{value}`.", parse_mode='Markdown')
     await message.reply_text(_format_row_vertical(appended, len(appended)), parse_mode='Markdown')
     return True
 
@@ -369,7 +389,7 @@ async def webhook_handler(request: Request):
             
             if query.data == 'mode_help':
                 await query.edit_message_text(
-                    "ℹ️ **Hướng dẫn tính năng**\n\n- Upload CSV để nạp file, ví dụ `bctk.csv`.\n- CSV dùng lệnh: `tên_file hien`, `tên_file hien muc`, `tên_file cachnhap`, `tên_file nhap 1=1 2=1 3=15,5 4=Sương nộp` hoặc `tên_file nhap 1 1 15,5 Sương nộp`, `tên_file nhap gui`, `tên_file tim ...`, `tên_file xem ...`, `tên_file xoa`.\n- Dùng `/list` để xem danh sách file CSV, `/listmd` để xem danh sách file Markdown.\n- Ánh xạ số nhập: `1=muc`, `2=thuchi`, `3=sotien`, `4=noidung`.\n- Với file có cột `muc`, `thuchi`, `sotien`, ba trường này là bắt buộc khi `nhap`.\n- Dạng ngắn của `nhap` sẽ đi theo thứ tự cột thật của file, ví dụ `muc thuchi sotien noidung`.\n- Markdown dùng tên có chữ `md` trong tên, ví dụ `mdquytrinh.md` hoặc `luatmd.doc.md`.\n- Markdown dùng `tên_file hien` hoặc `tên_file hien 1` để xem mục lục, ví dụ `mdphongtuc hien` sẽ hiện các chủ đề lớn; `tên_file xem 1 1` hoặc `tên_file xem 1 1 1` để xem toàn bộ chi tiết của nhánh đó, `tên_file xoa 2` để xóa mục theo số thứ tự, `tên_file them file.md` để gộp file.\n- Lịch âm dương dùng `callicham 10/3/2026` hoặc `callicham am 10/3/2026`.\n- Quản lý file: `/list`, `/listmd`, `/del <tên_file>`.\n\nVí dụ: `bctk tim 5~'hoacuong' and 1==2020`",
+                    "ℹ️ **Hướng dẫn tính năng**\n\n- Upload CSV để nạp file, ví dụ `bctk.csv`.\n- CSV dùng lệnh: `tên_file hien`, `tên_file hien muc`, `tên_file cachnhap`, `tên_file nhap 1=1 2=1 3=15,5 4=Sương nộp` hoặc `tên_file nhap 1 1 15,5 Sương nộp`, `tên_file nhap gui`, `tên_file tim ...`, `tên_file xem ...`, `tên_file xoa`.\n- Dùng `/list` để xem danh sách file CSV, `/listmd` để xem danh sách file Markdown.\n- Ánh xạ số nhập: `1=muc`, `2=thuchi`, `3=sotien`, `4=noidung`.\n- Với file có cột `muc`, `thuchi`, `sotien`, ba trường này là bắt buộc khi `nhap`.\n- Dạng ngắn của `nhap` sẽ đi theo thứ tự cột thật của file, ví dụ `muc thuchi sotien noidung`.\n- Khi `nhap gui`, bạn có thể gõ `/back` để quay lại bước trước và sửa giá trị.\n- Markdown dùng tên có chữ `md` trong tên, ví dụ `mdquytrinh.md` hoặc `luatmd.doc.md`.\n- Markdown dùng `tên_file hien` hoặc `tên_file hien 1` để xem mục lục, ví dụ `mdphongtuc hien` sẽ hiện các chủ đề lớn; `tên_file xem 1 1` hoặc `tên_file xem 1 1 1` để xem toàn bộ chi tiết của nhánh đó, `tên_file xoa 2` để xóa mục theo số thứ tự, `tên_file them file.md` để gộp file.\n- Lịch âm dương dùng `callicham 10/3/2026` hoặc `callicham am 10/3/2026`.\n- Quản lý file: `/list`, `/listmd`, `/del <tên_file>`.\n\nVí dụ: `bctk tim 5~'hoacuong' and 1==2020`",
                     parse_mode='Markdown'
                 )
             elif query.data == 'mode_list':

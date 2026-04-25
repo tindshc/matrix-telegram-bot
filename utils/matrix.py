@@ -75,7 +75,7 @@ def _format_csv_input_help(df):
         "- `nhap 1=1 2=1 3=15,5 4=Sương nộp`",
         "- `nhap 1 1 15,5 Sương nộp`",
         "- `nhap gui` để bot hỏi từng trường một.",
-        "- `/cancel` để hủy phiên nhập đang chạy.",
+        "- `/back` để quay lại bước trước, `/cancel` để hủy phiên nhập đang chạy.",
         "- `id` sẽ tự tăng nếu cột này có trong file.",
         "- `1` là `muc`, `2` là `thuchi`, `3` là `sotien`, `4` là `noidung`.",
         "- Với `muc` và `thuchi`, nhập số thứ tự trong danh sách để chọn; nếu số đó không có thì bot lấy nguyên giá trị bạn gõ.",
