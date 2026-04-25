@@ -1,6 +1,7 @@
 import pandas as pd
 import io
 import re
+import unicodedata
 
 
 def _format_column_listing(df):
@@ -382,6 +383,12 @@ def _escape_markdown(text):
     return text
 
 
+def _strip_accents(text):
+    text = str(text)
+    normalized = unicodedata.normalize("NFD", text)
+    return "".join(ch for ch in normalized if unicodedata.category(ch) != "Mn")
+
+
 def _format_row_vertical(df, row_number):
     """Format one row as a vertical key/value list for Telegram."""
     if row_number < 1 or row_number > len(df):
@@ -428,8 +435,9 @@ def _evaluate_atomic_filter(df, clause, columns):
     """
     column_name, needle = _extract_numeric_column_contains(clause, columns)
     if column_name:
-        series = df[column_name].astype(str)
-        return series.str.contains(re.escape(needle), case=False, na=False, regex=False)
+        series = df[column_name].astype(str).map(_strip_accents).str.lower()
+        needle_norm = _strip_accents(needle).lower()
+        return series.str.contains(re.escape(needle_norm), case=False, na=False, regex=False)
 
     condition = _normalize_single_equals(clause)
     condition = _resolve_numeric_column_refs(condition, columns)
