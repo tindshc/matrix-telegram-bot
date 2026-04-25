@@ -177,6 +177,7 @@ def get_procedure_info(md_content):
         "Dùng <b>tên_file hien</b>, <b>tên_file hien 1</b>, <b>tên_file tim ~...</b>, "
         "<b>tên_file xem 1 1</b>, <b>tên_file xem 1 1 1</b>, <b>tên_file xoa 2</b>, hoặc <b>tên_file them &lt;file.md&gt;</b>."
     )
+    lines.append("Ví dụ: <b>mdphongtuc hien</b> sẽ hiện các mục lục lớn.")
     return "\n".join(lines)
 
 

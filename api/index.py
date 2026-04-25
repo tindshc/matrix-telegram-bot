@@ -14,7 +14,7 @@ from utils.procedure import (
     count_procedure_sections,
     delete_procedure_section,
 )
-from utils.db import db_set, db_get, db_list, db_delete
+from utils.db import db_set, db_get, db_list, db_delete, db_list_by_kind
 from utils.db import db_set_kind, db_get_kind, db_delete_kind
 
 # Initialize FastAPI
@@ -43,9 +43,15 @@ def _is_markdown_saved(user_id, fname):
 def get_main_menu():
     keyboard = [
         [InlineKeyboardButton("ℹ️ Hướng dẫn tính năng", callback_data='mode_help')],
-        [InlineKeyboardButton("📋 Danh sách file đã lưu", callback_data='mode_list')]
+        [InlineKeyboardButton("📋 Danh sách file CSV", callback_data='mode_list')]
     ]
     return InlineKeyboardMarkup(keyboard)
+
+
+def _format_file_list(title, files, empty_text):
+    if not files:
+        return empty_text
+    return f"{title}\n\n" + "\n".join([f"- `{f}`" for f in files])
 
 @app.get("/")
 def read_root():
@@ -204,16 +210,13 @@ async def webhook_handler(request: Request):
             
             if query.data == 'mode_help':
                 await query.edit_message_text(
-                    "ℹ️ **Hướng dẫn tính năng**\n\n- Upload CSV để nạp file, ví dụ `bctk.csv`.\n- CSV dùng lệnh: `tên_file hien`, `tên_file tim ...`, `tên_file xem ...`, `tên_file xoa`.\n- Markdown dùng tên có chữ `md` trong tên, ví dụ `mdquytrinh.md` hoặc `luatmd.doc.md`.\n- Markdown dùng `tên_file hien` hoặc `tên_file hien 1` để xem mục lục, `tên_file xem 1 1` hoặc `tên_file xem 1 1 1` để xem toàn bộ chi tiết của nhánh đó, `tên_file xoa 2` để xóa mục theo số thứ tự, `tên_file them file.md` để gộp file.\n- Lịch âm dương dùng `callicham 10/3/2026` hoặc `callicham am 10/3/2026`.\n- Quản lý file: `/list`, `/del <tên_file>`.\n\nVí dụ: `bctk tim 5~'hoacuong' and 1==2020`",
+                    "ℹ️ **Hướng dẫn tính năng**\n\n- Upload CSV để nạp file, ví dụ `bctk.csv`.\n- CSV dùng lệnh: `tên_file hien`, `tên_file tim ...`, `tên_file xem ...`, `tên_file xoa`.\n- Dùng `/list` để xem danh sách file CSV, `/listmd` để xem danh sách file Markdown.\n- Markdown dùng tên có chữ `md` trong tên, ví dụ `mdquytrinh.md` hoặc `luatmd.doc.md`.\n- Markdown dùng `tên_file hien` hoặc `tên_file hien 1` để xem mục lục, ví dụ `mdphongtuc hien` sẽ hiện các chủ đề lớn; `tên_file xem 1 1` hoặc `tên_file xem 1 1 1` để xem toàn bộ chi tiết của nhánh đó, `tên_file xoa 2` để xóa mục theo số thứ tự, `tên_file them file.md` để gộp file.\n- Lịch âm dương dùng `callicham 10/3/2026` hoặc `callicham am 10/3/2026`.\n- Quản lý file: `/list`, `/listmd`, `/del <tên_file>`.\n\nVí dụ: `bctk tim 5~'hoacuong' and 1==2020`",
                     parse_mode='Markdown'
                 )
             elif query.data == 'mode_list':
-                files = db_list(user_id)
-                if not files:
-                    await query.edit_message_text("📭 Bạn chưa lưu file nào.")
-                else:
-                    text = "📋 **Danh sách file của bạn:**\n\n" + "\n".join([f"- `{f}`" for f in files])
-                    await query.edit_message_text(text, parse_mode='Markdown')
+                files = db_list_by_kind(user_id, "csv")
+                text = _format_file_list("📋 **Danh sách file CSV của bạn:**", files, "📭 Bạn chưa lưu file CSV nào.")
+                await query.edit_message_text(text, parse_mode='Markdown')
             return {"status": "ok"}
 
         if update.message:
@@ -239,6 +242,18 @@ async def webhook_handler(request: Request):
                     await message.reply_text(f"🗑️ Đã xóa file `{fname}` khỏi bộ nhớ.", parse_mode='Markdown')
                 else:
                     await message.reply_text(f"⚠️ Không tìm thấy file `{fname}` trong bộ nhớ.", parse_mode='Markdown')
+                return {"status": "ok"}
+
+            if text.lower() == "/list":
+                files = db_list_by_kind(user_id, "csv")
+                text_out = _format_file_list("📋 **Danh sách file CSV của bạn:**", files, "📭 Bạn chưa lưu file CSV nào.")
+                await message.reply_text(text_out, parse_mode='Markdown')
+                return {"status": "ok"}
+
+            if text.lower() == "/listmd":
+                files = db_list_by_kind(user_id, "md")
+                text_out = _format_file_list("📋 **Danh sách file Markdown của bạn:**", files, "📭 Bạn chưa lưu file Markdown nào.")
+                await message.reply_text(text_out, parse_mode='Markdown')
                 return {"status": "ok"}
 
             # 2. Handle Matrix (by Name or Reply)

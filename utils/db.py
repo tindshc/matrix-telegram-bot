@@ -54,6 +54,16 @@ def db_list(user_id):
     # Strip the prefix to get clean filenames
     return [k.split(":")[-1] for k in keys]
 
+
+def db_list_by_kind(user_id, kind):
+    """Lists filenames filtered by saved kind."""
+    files = db_list(user_id)
+    result = []
+    for fname in files:
+        if db_get_kind(user_id, fname) == kind:
+            result.append(fname)
+    return result
+
 def db_delete(user_id, key):
     """Deletes a stored file reference"""
     full_key = f"user:{user_id}:file:{key}"
