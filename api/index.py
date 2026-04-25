@@ -1011,8 +1011,11 @@ async def webhook_handler(request: Request):
                 job_fname, job_formula = _normalize_job_command(text)
                 if job_fname:
                     if re.match(r"^x(?:ong|oa)\s+\d+$", job_formula.lower()):
-                        await message.reply_text("tác dụng", parse_mode='Markdown')
-                    if await handle_job_logic(user_id, job_fname, job_formula, message):
+                        await message.reply_text("đi vô", parse_mode='Markdown')
+                    handled = await handle_job_logic(user_id, job_fname, job_formula, message)
+                    if handled and re.match(r"^x(?:ong|oa)\s+\d+$", job_formula.lower()):
+                        await message.reply_text("đi ra", parse_mode='Markdown')
+                    if handled:
                         return {"status": "ok"}
 
             if text and not text.startswith("/"):
