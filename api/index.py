@@ -769,9 +769,9 @@ async def handle_job_logic(user_id, fname, formula, message):
         except Exception:
             await message.reply_text("❌ Không lưu được thay đổi của việc.", parse_mode='Markdown')
             return True
-        refreshed = ensure_job_schema(updated, "jviec")
-        if 1 <= int(parts[1]) <= len(refreshed):
-            row_text = _task_row_summary(refreshed.iloc[int(parts[1]) - 1], int(parts[1]))
+        work_df = _ordered_task_df(updated, only_open=False)
+        if 1 <= int(parts[1]) <= len(work_df):
+            row_text = _task_row_summary(work_df.iloc[int(parts[1]) - 1], int(parts[1]))
             await message.reply_text(f"✅ Đã cập nhật:\n{row_text}", parse_mode='Markdown')
         await message.reply_text(format_task_list(updated, only_open=True), parse_mode='Markdown')
         return True
@@ -1009,8 +1009,6 @@ async def webhook_handler(request: Request):
             if text:
                 job_fname, job_formula = _normalize_job_command(text)
                 if job_fname:
-                    if re.match(r"^x(?:ong|oa)\s+\d+$", job_formula.lower()):
-                        await message.reply_text(f"✅ Đã nhận `{job_fname} {job_formula}`.", parse_mode='Markdown')
                     if await handle_job_logic(user_id, job_fname, job_formula, message):
                         return {"status": "ok"}
 
