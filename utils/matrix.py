@@ -85,6 +85,10 @@ def _has_transaction_schema(df):
     return all(key in lower_map for key in ("muc", "thuchi", "sotien"))
 
 
+def _transaction_required_fields():
+    return ("muc", "thuchi", "sotien")
+
+
 def _parse_named_arguments(text):
     body = text.strip()
     if not body:
@@ -215,6 +219,16 @@ def _transaction_summary(df, selected_muc=None, selected_thuchi=None):
 
 
 def _append_row(df, row_data):
+    lower_map = {str(col).casefold(): col for col in df.columns}
+    if _has_transaction_schema(df):
+        missing = []
+        for field in _transaction_required_fields():
+            if field not in row_data or not str(row_data[field]).strip():
+                missing.append(field)
+        if missing:
+            missing_text = ", ".join(missing)
+            return None, f"❌ Thiếu trường bắt buộc: `{missing_text}`. Với file này, dùng `nhap` phải có `muc`, `thuchi`, `sotien`."
+
     new_row = {col: "" for col in df.columns}
     if "id" in df.columns:
         new_row["id"] = _auto_increment_id(df)
@@ -243,6 +257,12 @@ def _append_row(df, row_data):
                 new_row[col_name] = raw_value
         else:
             new_row[col_name] = value
+
+    if _has_transaction_schema(df):
+        for field in _transaction_required_fields():
+            col_name = lower_map[field]
+            if str(new_row[col_name]).strip() == "":
+                return None, f"❌ Thiếu trường bắt buộc: `{field}`."
 
     for col in df.columns:
         if col not in new_row:
@@ -374,7 +394,7 @@ def get_csv_info(csv_content):
         cols = ", ".join([f"`{c}`" for c in df.columns])
         return (
             f"Đã nhận file CSV.\nCác cột: {cols}\nSố dòng: {len(df)}\n"
-            "Dùng `hien`, `hien <cột>`, `nhap 1=1 2=1 3=15,5 4=Sương nộp`, `tim`, `xem`, `filter` hoặc công thức tính toán."
+            "Dùng `hien`, `hien <cột>`, `nhap 1=1 2=1 3=15,5 4=Sương nộp` hoặc `nhap 1 1 15,5 Sương nộp`, `tim`, `xem`, `filter` hoặc công thức tính toán."
         )
     except Exception as e:
         return f"Lỗi đọc file: {str(e)}"
@@ -413,6 +433,8 @@ def process_matrix(csv_content, formula):
                     "- `id` sẽ tự tăng nếu cột này có trong file.",
                     "- `1` là `muc`, `2` là `thuchi`, `3` là `sotien`, `4` là `noidung`.",
                     "- Với `muc` và `thuchi`, nhập số thứ tự trong danh sách để chọn; nếu số đó không có thì bot lấy nguyên giá trị bạn gõ.",
+                    "- Với file có cột `muc`, `thuchi`, `sotien`, ba trường này là bắt buộc khi `nhap`.",
+                    "- Nếu dùng dạng ngắn, nhập theo thứ tự cột: `muc`, `thuchi`, `sotien`, `noidung`.",
                 ]
                 if "muc" in {str(c).casefold() for c in df.columns}:
                     lines.append("")
