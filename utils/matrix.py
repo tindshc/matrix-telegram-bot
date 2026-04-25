@@ -437,7 +437,7 @@ def _evaluate_atomic_filter(df, clause, columns):
     if column_name:
         series = df[column_name].astype(str).map(_strip_accents).str.lower()
         needle_norm = _strip_accents(needle).lower()
-        return series.str.contains(re.escape(needle_norm), case=False, na=False, regex=False)
+        return series.str.contains(needle_norm, case=False, na=False, regex=False)
 
     condition = _normalize_single_equals(clause)
     condition = _resolve_numeric_column_refs(condition, columns)
