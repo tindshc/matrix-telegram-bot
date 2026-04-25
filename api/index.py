@@ -114,6 +114,11 @@ def _csv_input_fields(df):
     return [col for col in df.columns if str(col).casefold() != "id"]
 
 
+def _csv_is_select_field(field_name):
+    name = str(field_name).casefold()
+    return name.startswith("s") and name not in {"sotien"}
+
+
 def _csv_input_prompt(df, field_name, position, total):
     values = _unique_nonempty_values(df[field_name])
     lines = [f"Bước {position}/{total}: nhập `{field_name}`"]
@@ -123,7 +128,7 @@ def _csv_input_prompt(df, field_name, position, total):
         lines.append("Gõ /back để quay lại bước trước, /cancel để hủy.")
         return "\n".join(lines)
 
-    if values and len(values) <= 8:
+    if _csv_is_select_field(field_name) or (values and len(values) <= 8):
         lines.append("Chọn số hoặc gõ giá trị mới:")
         for idx, value in enumerate(values, 1):
             lines.append(f"{idx}. {value}")
@@ -403,7 +408,7 @@ async def _continue_csv_input_session(user_id, text, message):
             await message.reply_text(_csv_input_prompt(df, field_name, index + 1, len(fields)))
             return True
         value = parsed_amount
-    elif field_lower in {"muc", "thuchi"}:
+    elif _csv_is_select_field(field_name) or field_lower in {"muc", "thuchi"}:
         options = _unique_nonempty_values(df[field_name])
         if answer.isdigit():
             opt_index = int(answer) - 1
@@ -870,10 +875,18 @@ async def webhook_handler(request: Request):
             await query.answer()
             
             if query.data == 'mode_help':
-                await query.edit_message_text(
-                    "ℹ️ **Hướng dẫn tính năng**\n\n- Upload CSV để nạp file, ví dụ `bctk.csv`.\n- CSV dùng lệnh: `tên_file hien`, `tên_file hien muc`, `tên_file cachnhap`, `tên_file nhap 1=1 2=1 3=15,5 4=Sương nộp` hoặc `tên_file nhap 1 1 15,5 Sương nộp`, `tên_file nhap gui`, `tên_file tim ...`, `tên_file xem ...`, `tên_file xoa`.\n- Dùng `/list` để xem danh sách file CSV, `/listmd` để xem danh sách file Markdown, `/listj` để xem file việc.\n- Ánh xạ số nhập: `1=muc`, `2=thuchi`, `3=sotien`, `4=noidung`.\n- Với file có cột `muc`, `thuchi`, `sotien`, ba trường này là bắt buộc khi `nhap`.\n- Dạng ngắn của `nhap` sẽ đi theo thứ tự cột thật của file, ví dụ `muc thuchi sotien noidung`.\n- Khi `nhap gui`, bạn có thể gõ `/back` để quay lại bước trước và sửa giá trị.\n- File việc dùng tiền tố `j`, ví dụ `jviec` và `jphong`.\n- `jviec` là nhánh giao việc: `jviec giao 28/4 Báo cáo ctv ds`, `jviec giao am 10/3 Chạp mã nhà thờ lớn gd`, `jviec hien`, `jviec xem 1`, `jviec xong 1`.\n- Ở bước `nguoi` của `jviec nhap gui`, bot sẽ hiện danh sách tên từ `jphong` của phòng đó và cho nhập nhiều số như `1,2`.\n- `jphong` là sổ tên chung theo phòng: `jphong ds hien`, `jphong ds nhap ld ngamy congtin`, `jphong ds nhap ten=ld,ngamy,congtin`.\n- `ld` chỉ là một tên bình thường trong sổ, không phải vai trò riêng.\n- Markdown dùng tên có chữ `md` trong tên, ví dụ `mdquytrinh.md` hoặc `luatmd.doc.md`.\n- Markdown dùng `tên_file hien` hoặc `tên_file hien 1` để xem mục lục, ví dụ `mdphongtuc hien` sẽ hiện các chủ đề lớn; `tên_file xem 1 1` hoặc `tên_file xem 1 1 1` để xem toàn bộ chi tiết của nhánh đó, `tên_file xoa 2` để xóa mục theo số thứ tự, `tên_file them file.md` để gộp file.\n- Lịch âm dương dùng `callicham 10/3/2026` hoặc `callicham am 10/3/2026`.\n- Quản lý file: `/list`, `/listmd`, `/listj`, `/del <tên_file>`.\n\nVí dụ: `bctk tim 5~'hoacuong' and 1==2020`",
-                    parse_mode='Markdown'
-                )
+                help_lines = [
+                    "ℹ️ **Hướng dẫn nhanh**",
+                    "",
+                    "- CSV: `/list`, `hien`, `tim`, `xem`, `nhap gui`, `nhap`, `tinh`, `sua`, `xoa`.",
+                    "- CSV nhập: `nhap gui` để nhập từng bước, `nhap 1 1 15,5 Sương nộp` để nhập nhanh.",
+                    "- CSV chọn: cột bắt đầu bằng `s` là cột chọn, ví dụ `sgioitinh`.",
+                    "- `jviec`: giao việc, xem việc, xong việc, `cachnhap`, `nhap gui`.",
+                    "- `jphong`: danh sách tên theo phòng; `jphong cachnhap` để xem hướng dẫn.",
+                    "- Markdown: `hien`, `xem`, `tim`, `xoa`, `them`.",
+                    "- `/list` là CSV, `/listmd` là Markdown, `/listj` là file việc.",
+                ]
+                await query.edit_message_text("\n".join(help_lines), parse_mode='Markdown')
             elif query.data == 'mode_list':
                 files = db_list_by_kind(user_id, "csv")
                 text = _format_file_list("📋 **Danh sách file CSV của bạn:**", files, "📭 Bạn chưa lưu file CSV nào.")

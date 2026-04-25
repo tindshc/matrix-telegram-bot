@@ -69,18 +69,23 @@ def _format_selection_help(df, column_name, field_number):
     return "\n".join(lines)
 
 
+def _is_select_column(column_name):
+    name = str(column_name).casefold()
+    return name.startswith("s") and name not in {"sotien"}
+
+
 def _format_csv_input_help(df):
     lines = [
         "📝 **Cách nhập CSV**:",
-        "- `nhap 1=1 2=1 3=15,5 4=Sương nộp`",
-        "- `nhap 1 1 15,5 Sương nộp`",
-        "- `nhap gui` để bot hỏi từng trường một.",
+        "- `nhap gui` để bot hỏi từng cột theo bước.",
+        "- `nhap 1 1 15,5 Sương nộp` để nhập nhanh theo thứ tự cột.",
+        "- `tinh cbr = sinh*1000/dstb` để tính cột mới.",
+        "- `xem 1` để xem hàng số 1, `sua 1 ten=An` để sửa hàng, `xoa 1` để xóa hàng.",
         "- `/back` để quay lại bước trước, `/cancel` để hủy phiên nhập đang chạy.",
         "- `id` sẽ tự tăng nếu cột này có trong file.",
-        "- `1` là `muc`, `2` là `thuchi`, `3` là `sotien`, `4` là `noidung`.",
-        "- Với `muc` và `thuchi`, nhập số thứ tự trong danh sách để chọn; nếu số đó không có thì bot lấy nguyên giá trị bạn gõ.",
+        "- Cột bắt đầu bằng `s` được hiểu là cột chọn, ví dụ `sgioitinh`.",
         "- Với file có cột `muc`, `thuchi`, `sotien`, ba trường này là bắt buộc khi `nhap`.",
-        "- Dạng ngắn của `nhap` sẽ đi theo thứ tự cột thật của file, ví dụ `muc thuchi sotien noidung`.",
+        "- Dạng ngắn của `nhap` sẽ đi theo thứ tự cột thật của file.",
     ]
     if "muc" in {str(c).casefold() for c in df.columns}:
         lines.append("")
@@ -88,6 +93,10 @@ def _format_csv_input_help(df):
     if "thuchi" in {str(c).casefold() for c in df.columns}:
         lines.append("")
         lines.append(_format_selection_help(df, _resolve_column_name(list(df.columns), "thuchi"), 2))
+    for idx, col in enumerate(df.columns, 1):
+        if _is_select_column(col):
+            lines.append("")
+            lines.append(_format_selection_help(df, col, idx))
     return "\n".join(lines)
 
 
@@ -266,7 +275,7 @@ def _append_row(df, row_data):
             if parsed_amount is None:
                 return None, f"❌ Cột `sotien` phải là số, ví dụ `15` hoặc `15,5`."
             new_row[col_name] = parsed_amount
-        elif str(col_name).casefold() in {"muc", "thuchi"}:
+        elif _is_select_column(col_name) or str(col_name).casefold() in {"muc", "thuchi"}:
             raw_value = str(value).strip()
             options = _unique_nonempty_values(df[col_name])
             if raw_value.isdigit():
@@ -292,6 +301,51 @@ def _append_row(df, row_data):
 
     appended = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
     return appended, None
+
+
+def _delete_row(df, row_number):
+    if row_number < 1 or row_number > len(df):
+        return None
+    return df.drop(df.index[row_number - 1]).reset_index(drop=True)
+
+
+def _update_row(df, row_number, row_data):
+    if row_number < 1 or row_number > len(df):
+        return None, "❌ Số dòng không hợp lệ."
+
+    work_df = df.copy()
+    target_index = row_number - 1
+
+    for key, value in row_data.items():
+        key_text = str(key).strip()
+        if not key_text or key_text.casefold() == "id":
+            continue
+
+        col_name = _resolve_input_column(work_df, key_text)
+        if col_name is None:
+            continue
+
+        if str(col_name).casefold() == "sotien":
+            parsed_amount = _parse_amount(value)
+            if parsed_amount is None:
+                return None, f"❌ Cột `sotien` phải là số, ví dụ `15` hoặc `15,5`."
+            work_df.loc[target_index, col_name] = parsed_amount
+            continue
+
+        if _is_select_column(col_name) or str(col_name).casefold() in {"muc", "thuchi"}:
+            raw_value = str(value).strip()
+            options = _unique_nonempty_values(work_df[col_name])
+            if raw_value.isdigit():
+                opt_index = int(raw_value) - 1
+                if 0 <= opt_index < len(options):
+                    work_df.loc[target_index, col_name] = options[opt_index]
+                    continue
+            work_df.loc[target_index, col_name] = raw_value
+            continue
+
+        work_df.loc[target_index, col_name] = value
+
+    return work_df, None
 
 
 def _resolve_numeric_column_refs(condition, columns):
@@ -444,6 +498,43 @@ def process_matrix(csv_content, formula):
             if not column_name:
                 return "❌ Không tìm thấy cột cần hiện.", None
             return _format_unique_value_listing(df, column_name), None
+
+        if formula_lower.startswith("tinh "):
+            formula = formula[5:].strip()
+            formula_lower = formula.lower()
+
+        if formula_lower.startswith("xoa "):
+            row_text = formula[4:].strip()
+            if not row_text.isdigit():
+                return "❌ Dùng đúng dạng `xoa 1` để xóa hàng.", None
+            updated_df = _delete_row(df, int(row_text))
+            if updated_df is None:
+                return "❌ Số dòng không hợp lệ.", None
+            return f"✅ Đã xóa hàng số `{row_text}`.", updated_df.to_csv(index=False)
+
+        if formula_lower.startswith("sua "):
+            raw_args = formula[4:].strip()
+            if not raw_args:
+                return "❌ Dùng đúng dạng `sua 1 ten=An 3=15,5`.", None
+
+            parts = raw_args.split(maxsplit=1)
+            if not parts[0].isdigit():
+                return "❌ Dùng đúng dạng `sua 1 ten=An 3=15,5`.", None
+
+            row_number = int(parts[0])
+            payload = parts[1].strip() if len(parts) > 1 else ""
+            row_data = _parse_named_arguments(payload)
+            if not row_data:
+                row_data = _parse_positional_arguments(payload, df)
+            if not row_data:
+                return "❌ Dùng đúng dạng `sua 1 ten=An 3=15,5`.", None
+
+            updated_df, error = _update_row(df, row_number, row_data)
+            if error:
+                return error, None
+            if updated_df is None:
+                return "❌ Số dòng không hợp lệ.", None
+            return f"✅ Đã sửa hàng số `{row_number}`.", updated_df.to_csv(index=False)
 
         if formula_lower.startswith("nhap"):
             raw_args = formula[4:].strip()

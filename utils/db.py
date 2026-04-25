@@ -85,8 +85,16 @@ def db_list_by_kind(user_id, kind):
     files = db_list(user_id)
     result = []
     for fname in files:
-        if db_get_kind(user_id, fname) == kind:
+        saved_kind = db_get_kind(user_id, fname)
+        if saved_kind == kind:
             result.append(fname)
+            continue
+
+        if not saved_kind:
+            lower = str(fname).lower()
+            inferred = "job" if lower.startswith("j") else "md" if "md" in lower else "csv"
+            if inferred == kind:
+                result.append(fname)
     return result
 
 def db_delete(user_id, key):
