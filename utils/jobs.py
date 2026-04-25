@@ -483,24 +483,28 @@ def mark_task_done(df, row_number):
 
 
 def mark_task_done_visible(df, visible_number, only_open=True):
+    updated, row_text, error = complete_task_visible(df, visible_number, only_open=only_open)
+    if error:
+        return None, error
+    return updated, row_text
+
+
+def complete_task_visible(df, visible_number, only_open=True):
     work_df = _ordered_task_df(df, only_open=only_open)
 
     if visible_number < 1 or visible_number > len(work_df):
-        return None, "❌ Số việc không hợp lệ."
+        return None, None, "❌ Số việc không hợp lệ."
 
-    row = work_df.iloc[visible_number - 1].copy()
-    row["trangthai"] = "done"
-    if "ghichu" in work_df.columns:
-        note = str(row.get("ghichu", "")).strip()
-        stamp = datetime.now().strftime("%d/%m/%Y")
-        row["ghichu"] = f"{note} | xong {stamp}".strip(" |")
-
+    row_idx = work_df.iloc[visible_number - 1].name
     updated = ensure_job_schema(df, "jviec").copy()
-    row_id = work_df.iloc[visible_number - 1].name
-    for col in updated.columns:
-        if col in row.index:
-            updated.loc[row_id, col] = row[col]
-    return updated, None
+    updated.loc[row_idx, "trangthai"] = "done"
+    note = str(updated.loc[row_idx, "ghichu"]).strip()
+    stamp = datetime.now().strftime("%d/%m/%Y")
+    updated.loc[row_idx, "ghichu"] = f"{note} | xong {stamp}".strip(" |")
+
+    done_row = updated.loc[row_idx].copy()
+    row_text = _task_row_summary(done_row, visible_number)
+    return updated, row_text, None
 
 
 def delete_task_visible(df, visible_number, only_open=True):

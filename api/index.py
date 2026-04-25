@@ -29,9 +29,9 @@ from utils.jobs import (
     job_help_text,
     format_task_list,
     format_task_detail,
-    _task_row_summary,
     mark_task_done,
     mark_task_done_visible,
+    complete_task_visible,
     add_task,
     format_roster_summary,
     add_roster_entry,
@@ -760,14 +760,11 @@ async def handle_job_logic(user_id, fname, formula, message):
         if len(parts) != 2 or not parts[1].isdigit():
             await message.reply_text("❌ Dùng đúng dạng `xong 1`.", parse_mode='Markdown')
             return True
-        updated, error = mark_task_done_visible(df, int(parts[1]), only_open=True)
+        updated, row_text, error = complete_task_visible(df, int(parts[1]), only_open=True)
         if error:
             await message.reply_text(error, parse_mode='Markdown')
             return True
-        work_df = _ordered_task_df(updated, only_open=False)
-        if 1 <= int(parts[1]) <= len(work_df):
-            row_text = _task_row_summary(work_df.iloc[int(parts[1]) - 1], int(parts[1]))
-            await message.reply_text(f"✅ Đã cập nhật:\n{row_text}", parse_mode='Markdown')
+        await message.reply_text(f"✅ Đã cập nhật:\n{row_text}", parse_mode='Markdown')
         try:
             await _save_dataframe_file(user_id, fname, updated, message, JOB_KIND, "📂 Đã lưu bản cập nhật của")
         except Exception:
