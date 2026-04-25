@@ -149,7 +149,8 @@ def _job_input_prompt(fname, df, field_name, position, total, department=None, s
     if kind == "roster":
         if field_name == "phong":
             depts = selection_options or roster_departments(df)
-            lines.append("Chọn phòng hoặc gõ phòng mới:")
+            lines.append("Nhập phòng, ví dụ: `ds`, `gd`.")
+            lines.append("Bạn có thể gõ số bên dưới nếu muốn chọn nhanh, nhưng không bắt buộc:")
             for idx, dept in enumerate(depts, 1):
                 lines.append(f"{idx}. {dept}")
             lines.append("Gõ /back để quay lại bước trước, /cancel để hủy.")

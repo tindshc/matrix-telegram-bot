@@ -216,10 +216,11 @@ def job_help_text(fname: str):
         return "\n".join(
             [
                 "📝 **Cách dùng jphong**:",
+                "- `jphong cachnhap` để xem hướng dẫn nhập trước khi gõ dữ liệu.",
                 "- `jphong ds hien` để xem danh sách tên của phòng ds.",
-                "- `jphong gd hien` để xem danh sách của phòng gd.",
+                "- `jphong gd hien` để xem danh sách tên của phòng gd.",
                 "- `jphong ds nhap ngamy congtin` hoặc `jphong ds nhap ten=ngamy,congtin` để thêm nhiều tên một lượt.",
-                "- `jphong ds nhap gui` để bot hỏi phòng rồi tên.",
+                "- `jphong ds nhap gui` là nhập từng bước; ở bước phòng, gõ thẳng `ds` hoặc `gd`, không bắt buộc chọn số.",
                 "- `/back` để quay lại bước trước, `/cancel` để hủy.",
                 "- Dữ liệu được lưu chung trong một file `jphong`, phân biệt theo cột `phong`.",
                 "- `ld` chỉ là một tên đặc biệt trong danh sách, không phải vai trò riêng.",
@@ -229,13 +230,14 @@ def job_help_text(fname: str):
     return "\n".join(
         [
             "📝 **Cách dùng jviec**:",
+            "- `jviec cachnhap` để xem hướng dẫn nhập trước khi gõ dữ liệu.",
             "- `jviec giao 28/4 Báo cáo ctv ds` để giao việc; nếu bỏ năm thì bot tự hiểu là năm hiện tại.",
             "- `jviec giao am 10/3 Chạp mã nhà thờ lớn gd` để nhập ngày âm, bot sẽ đổi sang ngày dương.",
             "- `jviec hien` để xem các việc đang chờ.",
             "- `jviec xem` để xem toàn bộ, `jviec xem 1` để xem chi tiết việc số 1.",
             "- `jviec xong 1` để đánh dấu xong.",
-            "- `jviec nhap gui` có cột `diadiem` trước `nguoi`; nếu không có địa điểm thì gõ `-` hoặc `/skip`.",
-            "- `jviec nhap gui` để bot hỏi từng trường; ở bước `nguoi`, bot sẽ hiện danh sách từ `jphong` của phòng đó và cho chọn nhiều số như `1,2`.",
+            "- `jviec nhap gui` là nhập từng bước; có cột `diadiem` trước `nguoi`, nếu không có địa điểm thì gõ `-` hoặc `/skip`.",
+            "- Ở bước `phong`, gõ thẳng `ds`, `gd`...; ở bước `nguoi`, bot sẽ hiện danh sách từ `jphong` của phòng đó và cho chọn nhiều số như `1,2`.",
             "- `/back` để quay lại bước trước, `/cancel` để hủy.",
             "- File `jviec` lưu theo CSV riêng, tách khỏi CSV thường và Markdown.",
         ]
