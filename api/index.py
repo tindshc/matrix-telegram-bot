@@ -770,6 +770,7 @@ async def handle_job_logic(user_id, fname, formula, message):
         except Exception:
             await message.reply_text("❌ Không lưu được thay đổi của việc.", parse_mode='Markdown')
             return True
+        await message.reply_text("tác dụng", parse_mode='Markdown')
         await message.reply_text(format_task_list(updated, only_open=True), parse_mode='Markdown')
         return True
 
