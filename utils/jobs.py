@@ -47,6 +47,51 @@ def _current_year():
     return datetime.now().year
 
 
+def _parse_task_deadline(text: str):
+    raw = str(text).strip()
+    if not raw:
+        return None
+
+    match = re.match(r"^(\d{2})/(\d{2})/(\d{4})(?:\s+(\d{2}):(\d{2}))?$", raw)
+    if not match:
+        return None
+
+    day = int(match.group(1))
+    month = int(match.group(2))
+    year = int(match.group(3))
+    hour = int(match.group(4) or 0)
+    minute = int(match.group(5) or 0)
+    try:
+        return datetime(year, month, day, hour, minute)
+    except ValueError:
+        return None
+
+
+def _task_deadline_relative_label(value):
+    deadline = _parse_task_deadline(value)
+    if not deadline:
+        return ""
+
+    today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    target = deadline.replace(hour=0, minute=0, second=0, microsecond=0)
+    delta_days = (target - today).days
+
+    if delta_days == 0:
+        return "hôm nay"
+    if delta_days == 1:
+        return "ngày mai"
+    if delta_days > 1:
+        return f"còn {delta_days} ngày"
+    return f"quá hạn {abs(delta_days)} ngày"
+
+
+def _task_sort_key(row):
+    deadline = _parse_task_deadline(row.get("han", ""))
+    if deadline is None:
+        return (1, datetime.max)
+    return (0, deadline)
+
+
 def _parse_date_token(token: str, lunar: bool = False):
     token = str(token).strip()
     match = re.match(r"^(\d{1,2})/(\d{1,2})(?:/(\d{4}))?$", token)
@@ -300,6 +345,9 @@ def _task_row_display(row, row_number):
     parts = []
     if han:
         parts.append(han)
+        rel = _task_deadline_relative_label(han)
+        if rel:
+            parts.append(rel)
     if phong:
         parts.append(phong)
     if diadiem:
@@ -321,10 +369,16 @@ def format_task_list(df, only_open=True):
         mask = work_df["trangthai"].astype(str).str.lower().ne("done")
         work_df = work_df[mask]
 
+    if not work_df.empty and "han" in work_df.columns:
+        work_df = work_df.copy()
+        work_df["_sort"] = work_df.apply(_task_sort_key, axis=1)
+        work_df = work_df.sort_values("_sort").drop(columns=["_sort"])
+
     if work_df.empty:
         return "📭 Chưa có việc nào."
 
-    lines = ["📋 **Danh sách việc**:"]
+    today = datetime.now().strftime("%d/%m/%Y")
+    lines = [f"📋 **Danh sách việc** - hôm nay `{today}`:"]
     for idx, (_, row) in enumerate(work_df.iterrows(), 1):
         lines.append(_task_row_display(row, idx))
     return "\n".join(lines)
