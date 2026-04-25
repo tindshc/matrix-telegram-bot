@@ -44,6 +44,31 @@ def db_delete_kind(user_id, key):
     headers = {"Authorization": f"Bearer {REDIS_TOKEN}"}
     requests.get(url, headers=headers)
 
+
+def db_set_state(user_id, key, value):
+    """Stores a transient conversational state."""
+    full_key = f"user:{user_id}:state:{key}"
+    url = f"{REDIS_URL}/set/{full_key}/{value}"
+    headers = {"Authorization": f"Bearer {REDIS_TOKEN}"}
+    requests.get(url, headers=headers)
+
+
+def db_get_state(user_id, key):
+    """Retrieves a conversational state value."""
+    full_key = f"user:{user_id}:state:{key}"
+    url = f"{REDIS_URL}/get/{full_key}"
+    headers = {"Authorization": f"Bearer {REDIS_TOKEN}"}
+    res = requests.get(url, headers=headers).json()
+    return res.get("result")
+
+
+def db_delete_state(user_id, key):
+    """Deletes a conversational state value."""
+    full_key = f"user:{user_id}:state:{key}"
+    url = f"{REDIS_URL}/del/{full_key}"
+    headers = {"Authorization": f"Bearer {REDIS_TOKEN}"}
+    requests.get(url, headers=headers)
+
 def db_list(user_id):
     """Lists all filenames stored by the user"""
     pattern = f"user:{user_id}:file:*"

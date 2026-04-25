@@ -1,6 +1,8 @@
 import os
 import requests
 import io
+import json
+import pandas as pd
 from fastapi import FastAPI, Request
 from telegram import Update, Bot, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
@@ -16,6 +18,8 @@ from utils.procedure import (
 )
 from utils.db import db_set, db_get, db_list, db_delete, db_list_by_kind
 from utils.db import db_set_kind, db_get_kind, db_delete_kind
+from utils.db import db_set_state, db_get_state, db_delete_state
+from utils.matrix import _parse_amount, _unique_nonempty_values, _append_row, _format_row_vertical
 
 # Initialize FastAPI
 app = FastAPI()
@@ -53,6 +57,35 @@ def _format_file_list(title, files, empty_text):
         return empty_text
     return f"{title}\n\n" + "\n".join([f"- `{f}`" for f in files])
 
+
+def _csv_input_state_key(fname):
+    return "csvinput"
+
+
+def _csv_input_fields(df):
+    return [col for col in df.columns if str(col).casefold() != "id"]
+
+
+def _csv_input_prompt(df, field_name, position, total):
+    values = _unique_nonempty_values(df[field_name])
+    lines = [f"Bước {position}/{total}: nhập `{field_name}`"]
+
+    if str(field_name).casefold() == "sotien":
+        lines.append("Nhập số, ví dụ: 75 hoặc 15,5")
+        lines.append("Gõ /cancel để hủy.")
+        return "\n".join(lines)
+
+    if values and len(values) <= 8:
+        lines.append("Chọn số hoặc gõ giá trị mới:")
+        for idx, value in enumerate(values, 1):
+            lines.append(f"{idx}. {value}")
+        lines.append("Gõ /cancel để hủy.")
+        return "\n".join(lines)
+
+    lines.append("Nhập nội dung.")
+    lines.append("Gõ /cancel để hủy.")
+    return "\n".join(lines)
+
 @app.get("/")
 def read_root():
     return {"message": "Telegram Bot is running!"}
@@ -66,6 +99,17 @@ async def handle_matrix_logic(user_id, fname, formula, message):
     await message.reply_text(f"🔄 Đang xử lý trên file `{fname}`...", parse_mode='Markdown')
     file = await bot.get_file(file_id)
     content = requests.get(file.file_path).content.decode('utf-8')
+
+    formula = formula.strip()
+    formula_lower = formula.lower()
+
+    if formula_lower == "cachnhap":
+        help_text, _ = process_matrix(content, "nhap")
+        await message.reply_text(help_text)
+        return True
+
+    if formula_lower == "nhap gui":
+        return await _start_csv_input_session(user_id, fname, message)
     
     result_text, updated_csv = process_matrix(content, formula)
     
@@ -88,6 +132,121 @@ async def handle_matrix_logic(user_id, fname, formula, message):
         db_set(user_id, fname, sent_msg.document.file_id)
         await message.reply_text(f"💾 Đã ghi đè dữ liệu mới vào tên file `{fname}`.", parse_mode='Markdown')
     
+    return True
+
+
+async def _start_csv_input_session(user_id, fname, message):
+    file_id = db_get(user_id, fname)
+    if not file_id:
+        return False
+
+    file = await bot.get_file(file_id)
+    content = requests.get(file.file_path).content.decode('utf-8')
+    df = pd.read_csv(io.StringIO(content), engine='python')
+    fields = _csv_input_fields(df)
+
+    if not fields:
+        await message.reply_text("❌ File CSV này không có cột nào để nhập.")
+        return True
+
+    state = {"fname": fname, "index": 0, "values": {}}
+    db_set_state(user_id, _csv_input_state_key(fname), json.dumps(state, ensure_ascii=False))
+
+    help_text, _ = process_matrix(content, "nhap")
+    await message.reply_text(help_text)
+    await message.reply_text(_csv_input_prompt(df, fields[0], 1, len(fields)))
+    return True
+
+
+async def _continue_csv_input_session(user_id, text, message):
+    state_raw = db_get_state(user_id, _csv_input_state_key(""))
+    if not state_raw:
+        return False
+
+    try:
+        state = json.loads(state_raw)
+    except Exception:
+        db_delete_state(user_id, _csv_input_state_key(""))
+        return False
+
+    fname = state.get("fname")
+    if not fname:
+        db_delete_state(user_id, _csv_input_state_key(""))
+        return False
+
+    answer = text.strip()
+    if answer.lower() in {"/cancel", "cancel", "huy", "hủy"}:
+        db_delete_state(user_id, _csv_input_state_key(""))
+        await message.reply_text(f"🛑 Đã hủy nhập cho file `{fname}`.", parse_mode='Markdown')
+        return True
+
+    file_id = db_get(user_id, fname)
+    if not file_id:
+        db_delete_state(user_id, _csv_input_state_key(""))
+        await message.reply_text(f"❌ Không tìm thấy file `{fname}` trong bộ nhớ.", parse_mode='Markdown')
+        return True
+
+    file = await bot.get_file(file_id)
+    content = requests.get(file.file_path).content.decode('utf-8')
+    df = pd.read_csv(io.StringIO(content), engine='python')
+    fields = _csv_input_fields(df)
+    index = int(state.get("index", 0))
+    values = state.get("values", {})
+
+    if index >= len(fields):
+        db_delete_state(user_id, _csv_input_state_key(""))
+        return False
+
+    field_name = fields[index]
+    field_lower = str(field_name).casefold()
+    value = answer
+
+    if field_lower == "sotien":
+        parsed_amount = _parse_amount(answer)
+        if parsed_amount is None:
+            await message.reply_text("❌ Cột `sotien` phải là số, ví dụ `75` hoặc `15,5`.")
+            await message.reply_text(_csv_input_prompt(df, field_name, index + 1, len(fields)))
+            return True
+        value = parsed_amount
+    elif field_lower in {"muc", "thuchi"}:
+        options = _unique_nonempty_values(df[field_name])
+        if answer.isdigit():
+            opt_index = int(answer) - 1
+            if 0 <= opt_index < len(options):
+                value = options[opt_index]
+
+    values[field_name] = value
+    state["index"] = index + 1
+    state["values"] = values
+
+    if state["index"] < len(fields):
+        db_set_state(user_id, _csv_input_state_key(""), json.dumps(state, ensure_ascii=False))
+        next_field = fields[state["index"]]
+        await message.reply_text(_csv_input_prompt(df, next_field, state["index"] + 1, len(fields)))
+        return True
+
+    appended, error = _append_row(df, values)
+    if error:
+        db_delete_state(user_id, _csv_input_state_key(""))
+        await message.reply_text(error)
+        return True
+
+    updated_csv = appended.to_csv(index=False)
+    csv_file = io.BytesIO(updated_csv.encode('utf-8'))
+    csv_file.name = f"{fname}.csv"
+
+    sent_msg = await bot.send_document(
+        chat_id=message.chat_id,
+        document=csv_file,
+        caption=f"📂 Đã lưu bản cập nhật của `{fname}`",
+        disable_notification=True
+    )
+
+    db_set(user_id, fname, sent_msg.document.file_id)
+    db_set_kind(user_id, fname, "csv")
+    db_delete_state(user_id, _csv_input_state_key(""))
+
+    await message.reply_text(_format_row_vertical(appended, len(appended)), parse_mode='Markdown')
     return True
 
 
@@ -210,7 +369,7 @@ async def webhook_handler(request: Request):
             
             if query.data == 'mode_help':
                 await query.edit_message_text(
-                    "ℹ️ **Hướng dẫn tính năng**\n\n- Upload CSV để nạp file, ví dụ `bctk.csv`.\n- CSV dùng lệnh: `tên_file hien`, `tên_file hien muc`, `tên_file cachnhap`, `tên_file nhap 1=1 2=1 3=15,5 4=Sương nộp` hoặc `tên_file nhap 1 1 15,5 Sương nộp`, `tên_file tim ...`, `tên_file xem ...`, `tên_file xoa`.\n- Dùng `/list` để xem danh sách file CSV, `/listmd` để xem danh sách file Markdown.\n- Ánh xạ số nhập: `1=muc`, `2=thuchi`, `3=sotien`, `4=noidung`.\n- Với file có cột `muc`, `thuchi`, `sotien`, ba trường này là bắt buộc khi `nhap`.\n- Dạng ngắn của `nhap` sẽ đi theo thứ tự cột thật của file, ví dụ `muc thuchi sotien noidung`.\n- Markdown dùng tên có chữ `md` trong tên, ví dụ `mdquytrinh.md` hoặc `luatmd.doc.md`.\n- Markdown dùng `tên_file hien` hoặc `tên_file hien 1` để xem mục lục, ví dụ `mdphongtuc hien` sẽ hiện các chủ đề lớn; `tên_file xem 1 1` hoặc `tên_file xem 1 1 1` để xem toàn bộ chi tiết của nhánh đó, `tên_file xoa 2` để xóa mục theo số thứ tự, `tên_file them file.md` để gộp file.\n- Lịch âm dương dùng `callicham 10/3/2026` hoặc `callicham am 10/3/2026`.\n- Quản lý file: `/list`, `/listmd`, `/del <tên_file>`.\n\nVí dụ: `bctk tim 5~'hoacuong' and 1==2020`",
+                    "ℹ️ **Hướng dẫn tính năng**\n\n- Upload CSV để nạp file, ví dụ `bctk.csv`.\n- CSV dùng lệnh: `tên_file hien`, `tên_file hien muc`, `tên_file cachnhap`, `tên_file nhap 1=1 2=1 3=15,5 4=Sương nộp` hoặc `tên_file nhap 1 1 15,5 Sương nộp`, `tên_file nhap gui`, `tên_file tim ...`, `tên_file xem ...`, `tên_file xoa`.\n- Dùng `/list` để xem danh sách file CSV, `/listmd` để xem danh sách file Markdown.\n- Ánh xạ số nhập: `1=muc`, `2=thuchi`, `3=sotien`, `4=noidung`.\n- Với file có cột `muc`, `thuchi`, `sotien`, ba trường này là bắt buộc khi `nhap`.\n- Dạng ngắn của `nhap` sẽ đi theo thứ tự cột thật của file, ví dụ `muc thuchi sotien noidung`.\n- Markdown dùng tên có chữ `md` trong tên, ví dụ `mdquytrinh.md` hoặc `luatmd.doc.md`.\n- Markdown dùng `tên_file hien` hoặc `tên_file hien 1` để xem mục lục, ví dụ `mdphongtuc hien` sẽ hiện các chủ đề lớn; `tên_file xem 1 1` hoặc `tên_file xem 1 1 1` để xem toàn bộ chi tiết của nhánh đó, `tên_file xoa 2` để xóa mục theo số thứ tự, `tên_file them file.md` để gộp file.\n- Lịch âm dương dùng `callicham 10/3/2026` hoặc `callicham am 10/3/2026`.\n- Quản lý file: `/list`, `/listmd`, `/del <tên_file>`.\n\nVí dụ: `bctk tim 5~'hoacuong' and 1==2020`",
                     parse_mode='Markdown'
                 )
             elif query.data == 'mode_list':
@@ -255,6 +414,27 @@ async def webhook_handler(request: Request):
                 text_out = _format_file_list("📋 **Danh sách file Markdown của bạn:**", files, "📭 Bạn chưa lưu file Markdown nào.")
                 await message.reply_text(text_out, parse_mode='Markdown')
                 return {"status": "ok"}
+
+            if text.lower() == "/cancel":
+                state_raw = db_get_state(user_id, _csv_input_state_key(""))
+                if state_raw:
+                    try:
+                        state = json.loads(state_raw)
+                        fname = state.get("fname", "")
+                    except Exception:
+                        fname = ""
+                    db_delete_state(user_id, _csv_input_state_key(""))
+                    if fname:
+                        await message.reply_text(f"🛑 Đã hủy nhập cho file `{fname}`.", parse_mode='Markdown')
+                    else:
+                        await message.reply_text("🛑 Đã hủy phiên nhập đang chờ.")
+                else:
+                    await message.reply_text("Không có phiên nhập nào đang chạy.")
+                return {"status": "ok"}
+
+            if text and not text.startswith("/"):
+                if await _continue_csv_input_session(user_id, text, message):
+                    return {"status": "ok"}
 
             # 2. Handle Matrix (by Name or Reply)
             if text:
