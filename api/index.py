@@ -993,6 +993,12 @@ async def webhook_handler(request: Request):
                         await message.reply_text("Không có phiên nhập nào đang chạy.")
                 return {"status": "ok"}
 
+            if text:
+                job_fname, job_formula = _normalize_job_command(text)
+                if job_fname:
+                    if await handle_job_logic(user_id, job_fname, job_formula, message):
+                        return {"status": "ok"}
+
             if text and not text.startswith("/"):
                 if await _continue_csv_input_session(user_id, text, message):
                     return {"status": "ok"}
@@ -1013,11 +1019,6 @@ async def webhook_handler(request: Request):
                             await message.reply_text(f"🗑️ Đã xóa file `{fname}` khỏi bộ nhớ.", parse_mode='Markdown')
                         else:
                             await message.reply_text(f"⚠️ Không tìm thấy file `{fname}` trong bộ nhớ.", parse_mode='Markdown')
-                        return {"status": "ok"}
-
-                job_fname, job_formula = _normalize_job_command(text)
-                if job_fname:
-                    if await handle_job_logic(user_id, job_fname, job_formula, message):
                         return {"status": "ok"}
 
                 # Check if it's "name formula"
