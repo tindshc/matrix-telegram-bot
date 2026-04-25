@@ -113,6 +113,15 @@ def parse_job_task_payload(payload: str, known_depts=None):
     if not remainder:
         return {"han": date_value}, ""
 
+    diadiem = ""
+    skip_tokens = {"-", "/skip", "skip", "boqua", "bo qua", "bỏ qua"}
+    if remainder and remainder[0].lower() in skip_tokens:
+        remainder = remainder[1:]
+
+    if not remainder:
+        data = {"han": date_value}
+        return data, ""
+
     phong = ""
     if remainder[-1].lower() in known_depts:
         phong = remainder[-1]
@@ -120,6 +129,8 @@ def parse_job_task_payload(payload: str, known_depts=None):
 
     viec = " ".join(remainder).strip()
     data = {"han": date_value, "viec": viec}
+    if diadiem:
+        data["diadiem"] = diadiem
     if phong:
         data["phong"] = phong
     return data, viec
@@ -232,6 +243,7 @@ def job_help_text(fname: str):
             "📝 **Cách dùng jviec**:",
             "- `jviec cachnhap` để xem hướng dẫn nhập trước khi gõ dữ liệu.",
             "- `jviec giao 28/4 Báo cáo ctv ds` để giao việc; nếu bỏ năm thì bot tự hiểu là năm hiện tại.",
+            "- Nếu không có địa điểm, có thể chèn `-` sau ngày, ví dụ `jviec giao am 10/3 - Chạp mã nhà thờ lớn gd`.",
             "- `jviec giao am 10/3 Chạp mã nhà thờ lớn gd` để nhập ngày âm, bot sẽ đổi sang ngày dương.",
             "- `jviec hien` để xem các việc đang chờ.",
             "- `jviec xem` để xem toàn bộ, `jviec xem 1` để xem chi tiết việc số 1.",
