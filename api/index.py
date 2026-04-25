@@ -36,6 +36,7 @@ from utils.jobs import (
     add_roster_entry,
     parse_job_task_payload,
     parse_job_roster_payload,
+    parse_job_roster_bulk_payload,
     parse_job_date_text,
     roster_members,
     roster_members_for_department,
@@ -576,12 +577,14 @@ async def _continue_job_input_session(user_id, text, message):
         return True
 
     if job_file_type(fname) == "roster":
-        row_data = parse_job_roster_payload("ten=" + str(values.get("ten", "")), department=department)
+        row_data = parse_job_roster_bulk_payload("ten=" + str(values.get("ten", "")), department=department)
         if not row_data:
             db_delete_state(user_id, _job_state_key(""))
             await message.reply_text("❌ Không thêm được nhân sự.")
             return True
-        appended = add_roster_entry(df, row_data)
+        appended = df
+        for item in row_data:
+            appended = add_roster_entry(appended, item)
     else:
         row_data = dict(values)
         appended = add_task(df, row_data)
@@ -643,13 +646,15 @@ async def handle_job_logic(user_id, fname, formula, message):
                 return True
             if payload.lower() == "gui":
                 return await _start_job_input_session(user_id, fname, message, department=department)
-            row_data = parse_job_roster_payload(payload, department=department)
-            if not row_data:
+            bulk_rows = parse_job_roster_bulk_payload(payload, department=department)
+            if not bulk_rows:
                 await message.reply_text("❌ Dữ liệu nhập nhân sự không hợp lệ.")
                 return True
-            if department and "phong" not in row_data:
-                row_data["phong"] = department
-            appended = add_roster_entry(df, row_data)
+            appended = df
+            for row_data in bulk_rows:
+                if department and "phong" not in row_data:
+                    row_data["phong"] = department
+                appended = add_roster_entry(appended, row_data)
             await _save_dataframe_file(user_id, fname, appended, message, JOB_KIND, "📂 Đã lưu bản cập nhật của")
             await message.reply_text(format_roster_summary(appended, department=department), parse_mode='Markdown')
             return True
@@ -859,7 +864,7 @@ async def webhook_handler(request: Request):
             
             if query.data == 'mode_help':
                 await query.edit_message_text(
-                    "ℹ️ **Hướng dẫn tính năng**\n\n- Upload CSV để nạp file, ví dụ `bctk.csv`.\n- CSV dùng lệnh: `tên_file hien`, `tên_file hien muc`, `tên_file cachnhap`, `tên_file nhap 1=1 2=1 3=15,5 4=Sương nộp` hoặc `tên_file nhap 1 1 15,5 Sương nộp`, `tên_file nhap gui`, `tên_file tim ...`, `tên_file xem ...`, `tên_file xoa`.\n- Dùng `/list` để xem danh sách file CSV, `/listmd` để xem danh sách file Markdown, `/listj` để xem file việc.\n- Ánh xạ số nhập: `1=muc`, `2=thuchi`, `3=sotien`, `4=noidung`.\n- Với file có cột `muc`, `thuchi`, `sotien`, ba trường này là bắt buộc khi `nhap`.\n- Dạng ngắn của `nhap` sẽ đi theo thứ tự cột thật của file, ví dụ `muc thuchi sotien noidung`.\n- Khi `nhap gui`, bạn có thể gõ `/back` để quay lại bước trước và sửa giá trị.\n- File việc dùng tiền tố `j`, ví dụ `jviec` và `jphong`.\n- `jviec` là nhánh giao việc: `jviec giao 28/4 Báo cáo ctv ds`, `jviec giao am 10/3 Chạp mã nhà thờ lớn gd`, `jviec hien`, `jviec xem 1`, `jviec xong 1`.\n- Ở bước `nguoi` của `jviec nhap gui`, bot sẽ hiện danh sách tên từ `jphong` của phòng đó và cho nhập nhiều số như `1,2`.\n- `jphong` là sổ tên chung theo phòng: `jphong ds hien`, `jphong ds nhap ld`, `jphong ds nhap gui`.\n- `ld` chỉ là một tên bình thường trong sổ, không phải vai trò riêng.\n- Markdown dùng tên có chữ `md` trong tên, ví dụ `mdquytrinh.md` hoặc `luatmd.doc.md`.\n- Markdown dùng `tên_file hien` hoặc `tên_file hien 1` để xem mục lục, ví dụ `mdphongtuc hien` sẽ hiện các chủ đề lớn; `tên_file xem 1 1` hoặc `tên_file xem 1 1 1` để xem toàn bộ chi tiết của nhánh đó, `tên_file xoa 2` để xóa mục theo số thứ tự, `tên_file them file.md` để gộp file.\n- Lịch âm dương dùng `callicham 10/3/2026` hoặc `callicham am 10/3/2026`.\n- Quản lý file: `/list`, `/listmd`, `/listj`, `/del <tên_file>`.\n\nVí dụ: `bctk tim 5~'hoacuong' and 1==2020`",
+                    "ℹ️ **Hướng dẫn tính năng**\n\n- Upload CSV để nạp file, ví dụ `bctk.csv`.\n- CSV dùng lệnh: `tên_file hien`, `tên_file hien muc`, `tên_file cachnhap`, `tên_file nhap 1=1 2=1 3=15,5 4=Sương nộp` hoặc `tên_file nhap 1 1 15,5 Sương nộp`, `tên_file nhap gui`, `tên_file tim ...`, `tên_file xem ...`, `tên_file xoa`.\n- Dùng `/list` để xem danh sách file CSV, `/listmd` để xem danh sách file Markdown, `/listj` để xem file việc.\n- Ánh xạ số nhập: `1=muc`, `2=thuchi`, `3=sotien`, `4=noidung`.\n- Với file có cột `muc`, `thuchi`, `sotien`, ba trường này là bắt buộc khi `nhap`.\n- Dạng ngắn của `nhap` sẽ đi theo thứ tự cột thật của file, ví dụ `muc thuchi sotien noidung`.\n- Khi `nhap gui`, bạn có thể gõ `/back` để quay lại bước trước và sửa giá trị.\n- File việc dùng tiền tố `j`, ví dụ `jviec` và `jphong`.\n- `jviec` là nhánh giao việc: `jviec giao 28/4 Báo cáo ctv ds`, `jviec giao am 10/3 Chạp mã nhà thờ lớn gd`, `jviec hien`, `jviec xem 1`, `jviec xong 1`.\n- Ở bước `nguoi` của `jviec nhap gui`, bot sẽ hiện danh sách tên từ `jphong` của phòng đó và cho nhập nhiều số như `1,2`.\n- `jphong` là sổ tên chung theo phòng: `jphong ds hien`, `jphong ds nhap ld ngamy congtin`, `jphong ds nhap ten=ld,ngamy,congtin`.\n- `ld` chỉ là một tên bình thường trong sổ, không phải vai trò riêng.\n- Markdown dùng tên có chữ `md` trong tên, ví dụ `mdquytrinh.md` hoặc `luatmd.doc.md`.\n- Markdown dùng `tên_file hien` hoặc `tên_file hien 1` để xem mục lục, ví dụ `mdphongtuc hien` sẽ hiện các chủ đề lớn; `tên_file xem 1 1` hoặc `tên_file xem 1 1 1` để xem toàn bộ chi tiết của nhánh đó, `tên_file xoa 2` để xóa mục theo số thứ tự, `tên_file them file.md` để gộp file.\n- Lịch âm dương dùng `callicham 10/3/2026` hoặc `callicham am 10/3/2026`.\n- Quản lý file: `/list`, `/listmd`, `/listj`, `/del <tên_file>`.\n\nVí dụ: `bctk tim 5~'hoacuong' and 1==2020`",
                     parse_mode='Markdown'
                 )
             elif query.data == 'mode_list':

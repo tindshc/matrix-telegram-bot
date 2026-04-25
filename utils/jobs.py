@@ -170,6 +170,36 @@ def parse_job_roster_payload(payload: str, department=None):
     return result
 
 
+def parse_job_roster_bulk_payload(payload: str, department=None):
+    text = str(payload).strip()
+    if not text:
+        return []
+
+    matches = list(re.finditer(r"(\w+)\s*=", text))
+    if matches:
+        named = {}
+        for i, match in enumerate(matches):
+            key = match.group(1).strip().lower()
+            start = match.end()
+            end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
+            value = text[start:end].strip()
+            named[key] = value
+
+        names_value = named.get("ten") or named.get("name") or named.get("tennguoi")
+        if not names_value:
+            return []
+        names = [part.strip() for part in re.split(r"[,\n;]+", names_value) if part.strip()]
+        return [{"phong": department or named.get("phong", "").strip(), "ten": name} for name in names]
+
+    if "," in text or " " in text:
+        names = [part.strip() for part in re.split(r"[,\n]+", text) if part.strip()]
+        if len(names) == 1 and " " in names[0]:
+            names = [part.strip() for part in names[0].split() if part.strip()]
+        return [{"phong": department or "", "ten": name} for name in names]
+
+    return [{"phong": department or "", "ten": text}]
+
+
 def _append_row(df, row_data):
     work_df = ensure_job_schema(df, "jviec" if "han" in df.columns else "jphong")
     new_row = {col: "" for col in work_df.columns}
@@ -188,7 +218,7 @@ def job_help_text(fname: str):
                 "📝 **Cách dùng jphong**:",
                 "- `jphong ds hien` để xem danh sách tên của phòng ds.",
                 "- `jphong gd hien` để xem danh sách của phòng gd.",
-                "- `jphong ds nhap ngamy` hoặc `jphong ds nhap ten=ngamy` để thêm người.",
+                "- `jphong ds nhap ngamy congtin` hoặc `jphong ds nhap ten=ngamy,congtin` để thêm nhiều tên một lượt.",
                 "- `jphong ds nhap gui` để bot hỏi phòng rồi tên.",
                 "- `/back` để quay lại bước trước, `/cancel` để hủy.",
                 "- Dữ liệu được lưu chung trong một file `jphong`, phân biệt theo cột `phong`.",
