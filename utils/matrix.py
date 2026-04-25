@@ -77,6 +77,8 @@ def _is_select_column(column_name):
 
 def _selection_options_for_field(df, column_name):
     options = _unique_nonempty_values(df[column_name])
+    if str(column_name).casefold() in {"noidung", "ghichu"}:
+        return []
     if _is_select_column(column_name):
         return options
     if len(options) <= 8:

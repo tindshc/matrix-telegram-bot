@@ -121,6 +121,8 @@ def _csv_is_select_field(field_name):
 
 def _csv_selection_options(df, field_name):
     options = _unique_nonempty_values(df[field_name])
+    if str(field_name).casefold() in {"noidung", "ghichu"}:
+        return []
     if _csv_is_select_field(field_name):
         return options
     if len(options) <= 8:
