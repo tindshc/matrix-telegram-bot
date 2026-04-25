@@ -135,7 +135,7 @@ def _parse_positional_arguments(text, df):
 
         if not value:
             continue
-        parsed[str(idx + 1)] = value
+        parsed[str(col)] = value
 
     return parsed
 
@@ -434,7 +434,7 @@ def process_matrix(csv_content, formula):
                     "- `1` là `muc`, `2` là `thuchi`, `3` là `sotien`, `4` là `noidung`.",
                     "- Với `muc` và `thuchi`, nhập số thứ tự trong danh sách để chọn; nếu số đó không có thì bot lấy nguyên giá trị bạn gõ.",
                     "- Với file có cột `muc`, `thuchi`, `sotien`, ba trường này là bắt buộc khi `nhap`.",
-                    "- Nếu dùng dạng ngắn, nhập theo thứ tự cột: `muc`, `thuchi`, `sotien`, `noidung`.",
+                    "- Nếu dùng dạng ngắn, nhập theo thứ tự cột thật của file, ví dụ `muc thuchi sotien noidung`.",
                 ]
                 if "muc" in {str(c).casefold() for c in df.columns}:
                     lines.append("")
