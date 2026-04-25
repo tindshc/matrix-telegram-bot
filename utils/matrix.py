@@ -108,6 +108,34 @@ def _parse_named_arguments(text):
     return parsed
 
 
+def _parse_positional_arguments(text, df):
+    """
+    Parse a compact positional form like:
+    `1 1 15,5 Thảo nộp`
+    using the non-id columns in their current order.
+    """
+    tokens = text.strip().split()
+    cols = _data_columns(df)
+    if not tokens or not cols:
+        return {}
+
+    parsed = {}
+    for idx, col in enumerate(cols):
+        if idx >= len(tokens):
+            break
+
+        if idx == len(cols) - 1:
+            value = " ".join(tokens[idx:]).strip()
+        else:
+            value = tokens[idx]
+
+        if not value:
+            continue
+        parsed[str(idx + 1)] = value
+
+    return parsed
+
+
 def _parse_amount(text):
     raw = str(text).strip()
     if not raw:
@@ -381,6 +409,7 @@ def process_matrix(csv_content, formula):
                 lines = [
                     "📝 **Mẫu nhập mới**:",
                     "- `nhap 1=1 2=1 3=15,5 4=Sương nộp`",
+                    "- `nhap 1 1 15,5 Sương nộp`",
                     "- `id` sẽ tự tăng nếu cột này có trong file.",
                     "- `1` là `muc`, `2` là `thuchi`, `3` là `sotien`, `4` là `noidung`.",
                     "- Với `muc` và `thuchi`, nhập số thứ tự trong danh sách để chọn; nếu số đó không có thì bot lấy nguyên giá trị bạn gõ.",
@@ -395,7 +424,9 @@ def process_matrix(csv_content, formula):
 
             row_data = _parse_named_arguments(raw_args)
             if not row_data:
-                return "❌ Dùng đúng dạng `nhap 1=1 2=1 3=15,5 4=Sương nộp`.", None
+                row_data = _parse_positional_arguments(raw_args, df)
+            if not row_data:
+                return "❌ Dùng đúng dạng `nhap 1=1 2=1 3=15,5 4=Sương nộp` hoặc `nhap 1 1 15,5 Sương nộp`.", None
 
             appended, error = _append_row(df, row_data)
             if error:
