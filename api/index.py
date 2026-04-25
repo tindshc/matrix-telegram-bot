@@ -764,15 +764,15 @@ async def handle_job_logic(user_id, fname, formula, message):
         if error:
             await message.reply_text(error, parse_mode='Markdown')
             return True
+        work_df = _ordered_task_df(updated, only_open=False)
+        if 1 <= int(parts[1]) <= len(work_df):
+            row_text = _task_row_summary(work_df.iloc[int(parts[1]) - 1], int(parts[1]))
+            await message.reply_text(f"✅ Đã cập nhật:\n{row_text}", parse_mode='Markdown')
         try:
             await _save_dataframe_file(user_id, fname, updated, message, JOB_KIND, "📂 Đã lưu bản cập nhật của")
         except Exception:
             await message.reply_text("❌ Không lưu được thay đổi của việc.", parse_mode='Markdown')
             return True
-        work_df = _ordered_task_df(updated, only_open=False)
-        if 1 <= int(parts[1]) <= len(work_df):
-            row_text = _task_row_summary(work_df.iloc[int(parts[1]) - 1], int(parts[1]))
-            await message.reply_text(f"✅ Đã cập nhật:\n{row_text}", parse_mode='Markdown')
         await message.reply_text(format_task_list(updated, only_open=True), parse_mode='Markdown')
         return True
 
@@ -785,6 +785,10 @@ async def handle_job_logic(user_id, fname, formula, message):
         if error:
             await message.reply_text(error, parse_mode='Markdown')
             return True
+        work_df = _ordered_task_df(updated, only_open=False)
+        if 1 <= int(parts[1]) <= len(work_df):
+            row_text = _task_row_summary(work_df.iloc[int(parts[1]) - 1], int(parts[1]))
+            await message.reply_text(f"✅ Đã xóa:\n{row_text}", parse_mode='Markdown')
         try:
             await _save_dataframe_file(user_id, fname, updated, message, JOB_KIND, "📂 Đã lưu bản cập nhật của")
         except Exception:
