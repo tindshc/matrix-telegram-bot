@@ -9,6 +9,182 @@ def _format_column_listing(df):
     return pd.DataFrame(rows).to_markdown(index=False)
 
 
+def _resolve_column_name(columns, ref):
+    """Resolve a column by 1-based index or case-insensitive name."""
+    ref = str(ref).strip()
+    if ref.isdigit():
+        index = int(ref) - 1
+        if 0 <= index < len(columns):
+            return columns[index]
+        return None
+
+    ref_lower = ref.casefold()
+    for col in columns:
+        if str(col).casefold() == ref_lower:
+            return col
+    return None
+
+
+def _unique_nonempty_values(series):
+    values = []
+    seen = set()
+    for value in series.tolist():
+        if pd.isna(value):
+            continue
+        text = str(value).strip()
+        if not text:
+            continue
+        if text in seen:
+            continue
+        seen.add(text)
+        values.append(text)
+    return values
+
+
+def _format_unique_value_listing(df, column_name):
+    values = _unique_nonempty_values(df[column_name])
+    if not values:
+        return f"📭 Cột `{column_name}` chưa có giá trị nào."
+
+    lines = [f"📋 **Giá trị duy nhất của `{column_name}`**:"]
+    for idx, value in enumerate(values, 1):
+        lines.append(f"{idx}. {value}")
+    return "\n".join(lines)
+
+
+def _has_transaction_schema(df):
+    lower_map = {str(col).casefold(): col for col in df.columns}
+    return all(key in lower_map for key in ("muc", "thuchi", "sotien"))
+
+
+def _parse_named_arguments(text):
+    body = text.strip()
+    if not body:
+        return {}
+
+    matches = list(re.finditer(r"(\w+)\s*=", body))
+    if not matches:
+        return {}
+
+    parsed = {}
+    for i, match in enumerate(matches):
+        key = match.group(1).strip().lower()
+        start = match.end()
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(body)
+        value = body[start:end].strip()
+        if value.startswith("'") and value.endswith("'"):
+            value = value[1:-1]
+        if value.startswith('"') and value.endswith('"'):
+            value = value[1:-1]
+        parsed[key] = value
+    return parsed
+
+
+def _parse_amount(text):
+    raw = str(text).strip()
+    if not raw:
+        return None
+    normalized = raw.replace(" ", "").replace(",", ".")
+    try:
+        value = float(normalized)
+    except ValueError:
+        return None
+    if value.is_integer():
+        return int(value)
+    return round(value, 2)
+
+
+def _auto_increment_id(df):
+    if "id" not in df.columns:
+        return None
+    ids = pd.to_numeric(df["id"], errors="coerce")
+    if ids.dropna().empty:
+        return 1
+    return int(ids.max()) + 1
+
+
+def _transaction_summary(df, selected_muc=None, selected_thuchi=None):
+    lower_map = {str(col).casefold(): col for col in df.columns}
+    muc_col = lower_map.get("muc")
+    thuchi_col = lower_map.get("thuchi")
+    sotien_col = lower_map.get("sotien")
+    noidung_col = lower_map.get("noidung")
+
+    work_df = df.copy()
+    work_df[muc_col] = work_df[muc_col].astype(str)
+    work_df[thuchi_col] = work_df[thuchi_col].astype(str)
+    work_df[sotien_col] = pd.to_numeric(work_df[sotien_col], errors="coerce").fillna(0)
+
+    if selected_muc is not None:
+        work_df = work_df[work_df[muc_col] == str(selected_muc)]
+
+    if work_df.empty:
+        return "❌ Không có dòng nào khớp với mục đã chọn.", None
+
+    lines = []
+    if selected_muc is not None:
+        lines.append(f"📌 **Mục**: {selected_muc}")
+
+    if selected_thuchi is not None:
+        lines.append(f"📌 **Loại đang xem**: {selected_thuchi}")
+
+    type_values = _unique_nonempty_values(work_df[thuchi_col])
+    if selected_thuchi is not None and selected_thuchi in type_values:
+        type_values = [selected_thuchi]
+
+    for type_value in type_values:
+        type_df = work_df[work_df[thuchi_col] == type_value]
+        if type_df.empty:
+            continue
+        lines.append("")
+        lines.append(f"**{type_value}**")
+        for idx, row in type_df.iterrows():
+            amount = row[sotien_col]
+            detail = ""
+            if noidung_col in work_df.columns:
+                detail = str(row.get(noidung_col, "")).strip()
+            if detail:
+                lines.append(f"- {amount}: {detail}")
+            else:
+                lines.append(f"- {amount}")
+        lines.append(f"Tổng {type_value.lower()}: {type_df[sotien_col].sum():g}")
+
+    lines.append("")
+    lines.append("**Tổng theo loại trong mục này**")
+    for type_value in _unique_nonempty_values(work_df[thuchi_col]):
+        type_df = work_df[work_df[thuchi_col] == type_value]
+        lines.append(f"- {type_value}: {type_df[sotien_col].sum():g}")
+
+    return "\n".join(lines), None
+
+
+def _append_row(df, row_data):
+    new_row = {col: "" for col in df.columns}
+    if "id" in df.columns:
+        new_row["id"] = _auto_increment_id(df)
+
+    for key, value in row_data.items():
+        if str(key).strip().lower() == "id":
+            continue
+        col_name = _resolve_column_name(df.columns, key)
+        if col_name is None:
+            continue
+        if str(col_name).casefold() == "sotien":
+            parsed_amount = _parse_amount(value)
+            if parsed_amount is None:
+                return None, f"❌ Cột `sotien` phải là số, ví dụ `15` hoặc `15,5`."
+            new_row[col_name] = parsed_amount
+        else:
+            new_row[col_name] = value
+
+    for col in df.columns:
+        if col not in new_row:
+            new_row[col] = ""
+
+    appended = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+    return appended, None
+
+
 def _resolve_numeric_column_refs(condition, columns):
     """
     Replace references like `3=='X'` with the actual column name.
@@ -129,7 +305,10 @@ def get_csv_info(csv_content):
     try:
         df = pd.read_csv(io.StringIO(csv_content))
         cols = ", ".join([f"`{c}`" for c in df.columns])
-        return f"Đã nhận file CSV.\nCác cột: {cols}\nSố dòng: {len(df)}\nHãy nhập công thức để tính toán."
+        return (
+            f"Đã nhận file CSV.\nCác cột: {cols}\nSố dòng: {len(df)}\n"
+            "Dùng `hien`, `hien <cột>`, `nhap`, `tim`, `xem`, `filter` hoặc công thức tính toán."
+        )
     except Exception as e:
         return f"Lỗi đọc file: {str(e)}"
 
@@ -150,8 +329,73 @@ def process_matrix(csv_content, formula):
             text += "\n\nDùng số thứ tự này trong lệnh `tim`, ví dụ: `tim 5~'đồng yên'`."
             return text, None
 
+        if formula_lower.startswith("hien "):
+            column_ref = formula[5:].strip()
+            column_name = _resolve_column_name(list(df.columns), column_ref)
+            if not column_name:
+                return "❌ Không tìm thấy cột cần hiện.", None
+            return _format_unique_value_listing(df, column_name), None
+
+        if formula_lower.startswith("nhap"):
+            raw_args = formula[4:].strip()
+            if not raw_args:
+                lines = [
+                    "📝 **Mẫu nhập mới**:",
+                    "- `nhap muc=Quỹ cơ quan thuchi=Thu sotien=15,5 noidung=Sương nộp`",
+                    "- `id` sẽ tự tăng nếu cột này có trong file.",
+                    "- Nếu `muc` hoặc `thuchi` nhập giá trị mới thì nó sẽ được thêm như mục mới.",
+                ]
+                if "muc" in {str(c).casefold() for c in df.columns}:
+                    lines.append("")
+                    lines.append(_format_unique_value_listing(df, _resolve_column_name(list(df.columns), "muc")))
+                if "thuchi" in {str(c).casefold() for c in df.columns}:
+                    lines.append("")
+                    lines.append(_format_unique_value_listing(df, _resolve_column_name(list(df.columns), "thuchi")))
+                return "\n".join(lines), None
+
+            row_data = _parse_named_arguments(raw_args)
+            if not row_data:
+                return "❌ Dùng đúng dạng `nhap muc=... thuchi=... sotien=... noidung=...`.", None
+
+            appended, error = _append_row(df, row_data)
+            if error:
+                return error, None
+
+            updated_csv = appended.to_csv(index=False)
+            msg = f"✅ Đã thêm dòng mới vào file.\n\n{appended.tail(5).to_markdown(index=False)}"
+            return msg, updated_csv
+
         if formula_lower.startswith("xem "):
             row_part = formula[4:].strip()
+            parts = formula.split()
+
+            if len(parts) == 3 and all(p.isdigit() for p in parts[1:]) and _has_transaction_schema(df):
+                lower_map = {str(col).casefold(): col for col in df.columns}
+                muc_col = lower_map["muc"]
+                thuchi_col = lower_map["thuchi"]
+                muc_values = _unique_nonempty_values(df[muc_col])
+                thuchi_values = _unique_nonempty_values(df[thuchi_col])
+
+                muc_index = int(parts[1]) - 1
+                thuchi_index = int(parts[2]) - 1
+                if muc_index < 0 or muc_index >= len(muc_values):
+                    return "❌ Số mục không hợp lệ.", None
+                if thuchi_index < 0 or thuchi_index >= len(thuchi_values):
+                    return "❌ Số loại không hợp lệ.", None
+
+                selected_muc = muc_values[muc_index]
+                selected_thuchi = thuchi_values[thuchi_index]
+                return _transaction_summary(df, selected_muc, selected_thuchi)
+
+            if len(parts) == 2 and parts[1].isdigit() and _has_transaction_schema(df):
+                lower_map = {str(col).casefold(): col for col in df.columns}
+                muc_col = lower_map["muc"]
+                muc_values = _unique_nonempty_values(df[muc_col])
+                muc_index = int(parts[1]) - 1
+                if muc_index < 0 or muc_index >= len(muc_values):
+                    return "❌ Số mục không hợp lệ.", None
+                return _transaction_summary(df, muc_values[muc_index], None)
+
             if not row_part.isdigit():
                 return "❌ Dùng đúng dạng `xem 1` để xem dòng theo số thứ tự.", None
 
