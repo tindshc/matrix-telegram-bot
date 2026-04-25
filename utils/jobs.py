@@ -117,6 +117,13 @@ def _is_task_done_value(value):
     return text in {"done", "xong", "completed", "complete", "hoan thanh", "hoàn thành"}
 
 
+def _clean_text(value):
+    if pd.isna(value):
+        return ""
+    text = str(value).strip()
+    return "" if text.lower() == "nan" else text
+
+
 def _ordered_task_df(df, only_open=True):
     work_df = ensure_job_schema(df, "jviec")
     if only_open and "trangthai" in work_df.columns:
@@ -371,13 +378,12 @@ def job_help_text(fname: str):
 
 
 def _task_row_display(row, row_number):
-    han = str(row.get("han", "")).strip()
-    viec = str(row.get("viec", "")).strip()
-    phong = str(row.get("phong", "")).strip()
-    diadiem = str(row.get("diadiem", "")).strip()
-    nguoi = str(row.get("nguoi", "")).strip()
-    trangthai = str(row.get("trangthai", "")).strip() or "chờ"
-    ghichu = str(row.get("ghichu", "")).strip()
+    han = _clean_text(row.get("han", ""))
+    viec = _clean_text(row.get("viec", ""))
+    phong = _clean_text(row.get("phong", ""))
+    diadiem = _clean_text(row.get("diadiem", ""))
+    nguoi = _clean_text(row.get("nguoi", ""))
+    trangthai = _clean_text(row.get("trangthai", "")) or "chờ"
 
     label = f"{row_number}. {viec}"
     parts = []
@@ -396,19 +402,16 @@ def _task_row_display(row, row_number):
     rel = _task_deadline_relative_label(han)
     if rel:
         label += f" - {rel}"
-    if ghichu:
-        label += f"\n  - {ghichu}"
     return label
 
 
 def _task_row_summary(row, row_number):
-    han = str(row.get("han", "")).strip()
-    viec = str(row.get("viec", "")).strip()
-    phong = str(row.get("phong", "")).strip()
-    diadiem = str(row.get("diadiem", "")).strip()
-    nguoi = str(row.get("nguoi", "")).strip()
-    trangthai = str(row.get("trangthai", "")).strip() or "chờ"
-    ghichu = str(row.get("ghichu", "")).strip()
+    han = _clean_text(row.get("han", ""))
+    viec = _clean_text(row.get("viec", ""))
+    phong = _clean_text(row.get("phong", ""))
+    diadiem = _clean_text(row.get("diadiem", ""))
+    nguoi = _clean_text(row.get("nguoi", ""))
+    trangthai = _clean_text(row.get("trangthai", "")) or "chờ"
 
     parts = [f"{row_number}. {viec}"]
     if han:
@@ -421,10 +424,7 @@ def _task_row_summary(row, row_number):
         parts.append(nguoi)
     if trangthai:
         parts.append(trangthai)
-    text = " | ".join(parts)
-    if ghichu:
-        text += f"\n  - {ghichu}"
-    return text
+    return " | ".join(parts)
 
 
 def format_task_list(df, only_open=True):
@@ -475,10 +475,6 @@ def mark_task_done(df, row_number):
     if row_number < 1 or row_number > len(work_df):
         return None, "❌ Số việc không hợp lệ."
     work_df.loc[row_number - 1, "trangthai"] = "done"
-    if "ghichu" in work_df.columns:
-        note = str(work_df.loc[row_number - 1, "ghichu"]).strip()
-        stamp = datetime.now().strftime("%d/%m/%Y")
-        work_df.loc[row_number - 1, "ghichu"] = f"{note} | xong {stamp}".strip(" |")
     return work_df, None
 
 
@@ -498,10 +494,6 @@ def complete_task_visible(df, visible_number, only_open=True):
     row_idx = work_df.iloc[visible_number - 1].name
     updated = ensure_job_schema(df, "jviec").copy()
     updated.loc[row_idx, "trangthai"] = "done"
-    note = str(updated.loc[row_idx, "ghichu"]).strip()
-    stamp = datetime.now().strftime("%d/%m/%Y")
-    updated.loc[row_idx, "ghichu"] = f"{note} | xong {stamp}".strip(" |")
-
     done_row = updated.loc[row_idx].copy()
     row_text = _task_row_summary(done_row, visible_number)
     return updated, row_text, None
