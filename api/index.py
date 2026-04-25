@@ -1006,6 +1006,8 @@ async def webhook_handler(request: Request):
             if text:
                 job_fname, job_formula = _normalize_job_command(text)
                 if job_fname:
+                    if re.match(r"^x(?:ong|oa)\s+\d+$", job_formula.lower()):
+                        await message.reply_text(f"✅ Đã nhận `{job_fname} {job_formula}`.", parse_mode='Markdown')
                     if await handle_job_logic(user_id, job_fname, job_formula, message):
                         return {"status": "ok"}
 
