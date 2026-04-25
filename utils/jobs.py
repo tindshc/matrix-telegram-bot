@@ -112,6 +112,11 @@ def _task_sort_key(row):
     return (0, deadline)
 
 
+def _is_task_done_value(value):
+    text = str(value).strip().lower()
+    return text in {"done", "xong", "completed", "complete", "hoan thanh", "hoàn thành"}
+
+
 def _parse_date_token(token: str, lunar: bool = False):
     token = str(token).strip()
     match = re.match(r"^(\d{1,2})/(\d{1,2})(?:/(\d{4}))?$", token)
@@ -386,7 +391,7 @@ def _task_row_display(row, row_number):
 def format_task_list(df, only_open=True):
     work_df = ensure_job_schema(df, "jviec")
     if only_open and "trangthai" in work_df.columns:
-        mask = work_df["trangthai"].astype(str).str.lower().ne("done")
+        mask = ~work_df["trangthai"].apply(_is_task_done_value)
         work_df = work_df[mask]
 
     if not work_df.empty and "han" in work_df.columns:
@@ -449,7 +454,7 @@ def mark_task_done(df, row_number):
 def mark_task_done_visible(df, visible_number, only_open=True):
     work_df = ensure_job_schema(df, "jviec")
     if only_open and "trangthai" in work_df.columns:
-        open_mask = work_df["trangthai"].astype(str).str.lower().ne("done")
+        open_mask = ~work_df["trangthai"].apply(_is_task_done_value)
         visible_indices = list(work_df[open_mask].index)
     else:
         visible_indices = list(work_df.index)
@@ -469,7 +474,7 @@ def mark_task_done_visible(df, visible_number, only_open=True):
 def delete_task_visible(df, visible_number, only_open=True):
     work_df = ensure_job_schema(df, "jviec")
     if only_open and "trangthai" in work_df.columns:
-        open_mask = work_df["trangthai"].astype(str).str.lower().ne("done")
+        open_mask = ~work_df["trangthai"].apply(_is_task_done_value)
         visible_indices = list(work_df[open_mask].index)
     else:
         visible_indices = list(work_df.index)
