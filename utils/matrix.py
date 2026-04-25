@@ -90,7 +90,8 @@ def _format_csv_input_help(df):
         "- `nhap gui` để bot hỏi từng cột theo bước.",
         "- `nhap 1 1 15,5 Sương nộp` để nhập nhanh theo thứ tự cột.",
         "- `tinh cbr = sinh*1000/dstb` để tính cột mới.",
-        "- `xem 1` để xem hàng số 1, `sua 1 ten=An` để sửa hàng, `xoa 1` để xóa hàng.",
+        "- `xem 1` để xem hàng số 1, `xemthuchi 1` để xem tổng thu/chi của mục 1.",
+        "- `sua 1 ten=An` để sửa hàng, `xoa 1` để xóa hàng.",
         "- `/back` để quay lại bước trước, `/cancel` để hủy phiên nhập đang chạy.",
         "- `id` sẽ tự tăng nếu cột này có trong file.",
         "- Cột bắt đầu bằng `s` được hiểu là cột chọn, ví dụ `sgioitinh`.",
@@ -199,7 +200,7 @@ def _auto_increment_id(df):
     return int(ids.max()) + 1
 
 
-def _transaction_summary(df, selected_muc=None, selected_thuchi=None):
+def _transaction_summary(df, selected_muc=None):
     lower_map = {str(col).casefold(): col for col in df.columns}
     muc_col = lower_map.get("muc")
     thuchi_col = lower_map.get("thuchi")
@@ -221,12 +222,7 @@ def _transaction_summary(df, selected_muc=None, selected_thuchi=None):
     if selected_muc is not None:
         lines.append(f"📌 **Mục**: {selected_muc}")
 
-    if selected_thuchi is not None:
-        lines.append(f"📌 **Loại đang xem**: {selected_thuchi}")
-
     type_values = _unique_nonempty_values(work_df[thuchi_col])
-    if selected_thuchi is not None and selected_thuchi in type_values:
-        type_values = [selected_thuchi]
 
     for type_value in type_values:
         type_df = work_df[work_df[thuchi_col] == type_value]
@@ -250,6 +246,22 @@ def _transaction_summary(df, selected_muc=None, selected_thuchi=None):
     for type_value in _unique_nonempty_values(work_df[thuchi_col]):
         type_df = work_df[work_df[thuchi_col] == type_value]
         lines.append(f"- {type_value}: {type_df[sotien_col].sum():g}")
+
+    thu_total = 0
+    chi_total = 0
+    for type_value in _unique_nonempty_values(work_df[thuchi_col]):
+        type_df = work_df[work_df[thuchi_col] == type_value]
+        type_sum = float(type_df[sotien_col].sum())
+        normalized = str(type_value).strip().casefold()
+        if normalized.startswith("thu"):
+            thu_total += type_sum
+        elif normalized.startswith("chi"):
+            chi_total += type_sum
+
+    lines.append("")
+    lines.append(f"**Tổng thu**: {thu_total:g}")
+    lines.append(f"**Tổng chi**: {chi_total:g}")
+    lines.append(f"**Còn tồn**: {(thu_total - chi_total):g}")
 
     return "\n".join(lines), None
 
@@ -572,35 +584,6 @@ def process_matrix(csv_content, formula):
 
         if formula_lower.startswith("xem "):
             row_part = formula[4:].strip()
-            parts = formula.split()
-
-            if len(parts) == 3 and all(p.isdigit() for p in parts[1:]) and _has_transaction_schema(df):
-                lower_map = {str(col).casefold(): col for col in df.columns}
-                muc_col = lower_map["muc"]
-                thuchi_col = lower_map["thuchi"]
-                muc_values = _unique_nonempty_values(df[muc_col])
-                thuchi_values = _unique_nonempty_values(df[thuchi_col])
-
-                muc_index = int(parts[1]) - 1
-                thuchi_index = int(parts[2]) - 1
-                if muc_index < 0 or muc_index >= len(muc_values):
-                    return "❌ Số mục không hợp lệ.", None
-                if thuchi_index < 0 or thuchi_index >= len(thuchi_values):
-                    return "❌ Số loại không hợp lệ.", None
-
-                selected_muc = muc_values[muc_index]
-                selected_thuchi = thuchi_values[thuchi_index]
-                return _transaction_summary(df, selected_muc, selected_thuchi)
-
-            if len(parts) == 2 and parts[1].isdigit() and _has_transaction_schema(df):
-                lower_map = {str(col).casefold(): col for col in df.columns}
-                muc_col = lower_map["muc"]
-                muc_values = _unique_nonempty_values(df[muc_col])
-                muc_index = int(parts[1]) - 1
-                if muc_index < 0 or muc_index >= len(muc_values):
-                    return "❌ Số mục không hợp lệ.", None
-                return _transaction_summary(df, muc_values[muc_index], None)
-
             if not row_part.isdigit():
                 return "❌ Dùng đúng dạng `xem 1` để xem dòng theo số thứ tự.", None
 
@@ -608,6 +591,21 @@ def process_matrix(csv_content, formula):
             if not rendered:
                 return "❌ Số dòng không hợp lệ.", None
             return rendered, None
+
+        if formula_lower.startswith("xemthuchi "):
+            row_part = formula[10:].strip()
+            if not row_part.isdigit():
+                return "❌ Dùng đúng dạng `xemthuchi 1`.", None
+            if not _has_transaction_schema(df):
+                return "❌ File này không có cấu trúc thu/chi.", None
+
+            lower_map = {str(col).casefold(): col for col in df.columns}
+            muc_col = lower_map["muc"]
+            muc_values = _unique_nonempty_values(df[muc_col])
+            muc_index = int(row_part) - 1
+            if muc_index < 0 or muc_index >= len(muc_values):
+                return "❌ Số mục không hợp lệ.", None
+            return _transaction_summary(df, muc_values[muc_index])
 
         # 1. Handle Filter/Query
         if formula_lower.startswith("tim "):
