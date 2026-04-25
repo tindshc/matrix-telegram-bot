@@ -770,7 +770,6 @@ async def handle_job_logic(user_id, fname, formula, message):
         except Exception:
             await message.reply_text("❌ Không lưu được thay đổi của việc.", parse_mode='Markdown')
             return True
-        await message.reply_text("tác dụng", parse_mode='Markdown')
         await message.reply_text(format_task_list(updated, only_open=True), parse_mode='Markdown')
         return True
 
@@ -1011,6 +1010,8 @@ async def webhook_handler(request: Request):
             if text:
                 job_fname, job_formula = _normalize_job_command(text)
                 if job_fname:
+                    if re.match(r"^x(?:ong|oa)\s+\d+$", job_formula.lower()):
+                        await message.reply_text("tác dụng", parse_mode='Markdown')
                     if await handle_job_logic(user_id, job_fname, job_formula, message):
                         return {"status": "ok"}
 
