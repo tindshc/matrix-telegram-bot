@@ -9,6 +9,11 @@ def _format_column_listing(df):
     return pd.DataFrame(rows).to_markdown(index=False)
 
 
+def _data_columns(df):
+    """Return input-relevant columns, skipping auto id if present."""
+    return [col for col in df.columns if str(col).casefold() != "id"]
+
+
 def _resolve_column_name(columns, ref):
     """Resolve a column by 1-based index or case-insensitive name."""
     ref = str(ref).strip()
@@ -25,6 +30,18 @@ def _resolve_column_name(columns, ref):
     return None
 
 
+def _resolve_input_column(df, ref):
+    """Resolve an input field by number or column name."""
+    ref = str(ref).strip()
+    if ref.isdigit():
+        cols = _data_columns(df)
+        index = int(ref) - 1
+        if 0 <= index < len(cols):
+            return cols[index]
+        return None
+    return _resolve_column_name(df.columns, ref)
+
+
 def _unique_nonempty_values(series):
     values = []
     seen = set()
@@ -39,6 +56,17 @@ def _unique_nonempty_values(series):
         seen.add(text)
         values.append(text)
     return values
+
+
+def _format_selection_help(df, column_name, field_number):
+    values = _unique_nonempty_values(df[column_name])
+    lines = [f"{field_number} = `{column_name}`"]
+    if values:
+        for idx, value in enumerate(values, 1):
+            lines.append(f"- {idx}. {value}")
+    else:
+        lines.append("- (chưa có giá trị nào)")
+    return "\n".join(lines)
 
 
 def _format_unique_value_listing(df, column_name):
@@ -166,7 +194,7 @@ def _append_row(df, row_data):
     for key, value in row_data.items():
         if str(key).strip().lower() == "id":
             continue
-        col_name = _resolve_column_name(df.columns, key)
+        col_name = _resolve_input_column(df, key)
         if col_name is None:
             continue
         if str(col_name).casefold() == "sotien":
@@ -174,6 +202,17 @@ def _append_row(df, row_data):
             if parsed_amount is None:
                 return None, f"❌ Cột `sotien` phải là số, ví dụ `15` hoặc `15,5`."
             new_row[col_name] = parsed_amount
+        elif str(col_name).casefold() in {"muc", "thuchi"}:
+            raw_value = str(value).strip()
+            options = _unique_nonempty_values(df[col_name])
+            if raw_value.isdigit():
+                opt_index = int(raw_value) - 1
+                if 0 <= opt_index < len(options):
+                    new_row[col_name] = options[opt_index]
+                else:
+                    new_row[col_name] = raw_value
+            else:
+                new_row[col_name] = raw_value
         else:
             new_row[col_name] = value
 
@@ -307,7 +346,7 @@ def get_csv_info(csv_content):
         cols = ", ".join([f"`{c}`" for c in df.columns])
         return (
             f"Đã nhận file CSV.\nCác cột: {cols}\nSố dòng: {len(df)}\n"
-            "Dùng `hien`, `hien <cột>`, `nhap`, `tim`, `xem`, `filter` hoặc công thức tính toán."
+            "Dùng `hien`, `hien <cột>`, `nhap 1=1 2=1 3=15,5 4=Sương nộp`, `tim`, `xem`, `filter` hoặc công thức tính toán."
         )
     except Exception as e:
         return f"Lỗi đọc file: {str(e)}"
@@ -341,21 +380,22 @@ def process_matrix(csv_content, formula):
             if not raw_args:
                 lines = [
                     "📝 **Mẫu nhập mới**:",
-                    "- `nhap muc=Quỹ cơ quan thuchi=Thu sotien=15,5 noidung=Sương nộp`",
+                    "- `nhap 1=1 2=1 3=15,5 4=Sương nộp`",
                     "- `id` sẽ tự tăng nếu cột này có trong file.",
-                    "- Nếu `muc` hoặc `thuchi` nhập giá trị mới thì nó sẽ được thêm như mục mới.",
+                    "- `1` là `muc`, `2` là `thuchi`, `3` là `sotien`, `4` là `noidung`.",
+                    "- Với `muc` và `thuchi`, nhập số thứ tự trong danh sách để chọn; nếu số đó không có thì bot lấy nguyên giá trị bạn gõ.",
                 ]
                 if "muc" in {str(c).casefold() for c in df.columns}:
                     lines.append("")
-                    lines.append(_format_unique_value_listing(df, _resolve_column_name(list(df.columns), "muc")))
+                    lines.append(_format_selection_help(df, _resolve_column_name(list(df.columns), "muc"), 1))
                 if "thuchi" in {str(c).casefold() for c in df.columns}:
                     lines.append("")
-                    lines.append(_format_unique_value_listing(df, _resolve_column_name(list(df.columns), "thuchi")))
+                    lines.append(_format_selection_help(df, _resolve_column_name(list(df.columns), "thuchi"), 2))
                 return "\n".join(lines), None
 
             row_data = _parse_named_arguments(raw_args)
             if not row_data:
-                return "❌ Dùng đúng dạng `nhap muc=... thuchi=... sotien=... noidung=...`.", None
+                return "❌ Dùng đúng dạng `nhap 1=1 2=1 3=15,5 4=Sương nộp`.", None
 
             appended, error = _append_row(df, row_data)
             if error:
