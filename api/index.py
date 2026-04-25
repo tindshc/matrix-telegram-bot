@@ -1012,7 +1012,14 @@ async def webhook_handler(request: Request):
                 if job_fname:
                     if re.match(r"^x(?:ong|oa)\s+\d+$", job_formula.lower()):
                         await message.reply_text("đi vô", parse_mode='Markdown')
-                    handled = await handle_job_logic(user_id, job_fname, job_formula, message)
+                    try:
+                        handled = await handle_job_logic(user_id, job_fname, job_formula, message)
+                    except Exception as exc:
+                        if re.match(r"^x(?:ong|oa)\s+\d+$", job_formula.lower()):
+                            await message.reply_text(f"lỗi: `{type(exc).__name__}`", parse_mode='Markdown')
+                        else:
+                            raise
+                        return {"status": "ok"}
                     if handled and re.match(r"^x(?:ong|oa)\s+\d+$", job_formula.lower()):
                         await message.reply_text("đi ra", parse_mode='Markdown')
                     if handled:
