@@ -113,13 +113,26 @@ def parse_job_task_payload(payload: str, known_depts=None):
     if not remainder:
         return {"han": date_value}, ""
 
-    diadiem = ""
     skip_tokens = {"-", "/skip", "skip", "boqua", "bo qua", "bỏ qua"}
-    if remainder and remainder[0].lower() in skip_tokens:
+    separator_index = None
+    for idx, token in enumerate(remainder):
+        if token.lower() in skip_tokens:
+            separator_index = idx
+            break
+
+    diadiem = ""
+    if separator_index is not None:
+        diadiem = " ".join(remainder[:separator_index]).strip()
+        remainder = remainder[separator_index + 1 :]
+    elif remainder and remainder[0].lower() in skip_tokens:
         remainder = remainder[1:]
 
+    if not remainder and not diadiem:
+        return {"han": date_value}, ""
     if not remainder:
         data = {"han": date_value}
+        if diadiem:
+            data["diadiem"] = diadiem
         return data, ""
 
     phong = ""
@@ -243,7 +256,8 @@ def job_help_text(fname: str):
             "📝 **Cách dùng jviec**:",
             "- `jviec cachnhap` để xem hướng dẫn nhập trước khi gõ dữ liệu.",
             "- `jviec giao 28/4 Báo cáo ctv ds` để giao việc; nếu bỏ năm thì bot tự hiểu là năm hiện tại.",
-            "- Nếu không có địa điểm, có thể chèn `-` sau ngày, ví dụ `jviec giao am 10/3 - Chạp mã nhà thờ lớn gd`.",
+            "- Nếu có địa điểm, hãy nhập theo mẫu `jviec giao am 10/3 UBND phường - Chạp mã nhà thờ lớn gd`.",
+            "- Nếu không có địa điểm, có thể chèn `-` ngay sau ngày, ví dụ `jviec giao am 10/3 - Chạp mã nhà thờ lớn gd`.",
             "- `jviec giao am 10/3 Chạp mã nhà thờ lớn gd` để nhập ngày âm, bot sẽ đổi sang ngày dương.",
             "- `jviec hien` để xem các việc đang chờ.",
             "- `jviec xem` để xem toàn bộ, `jviec xem 1` để xem chi tiết việc số 1.",
