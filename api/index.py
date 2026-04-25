@@ -29,6 +29,7 @@ from utils.jobs import (
     job_help_text,
     format_task_list,
     format_task_detail,
+    _task_row_summary,
     mark_task_done,
     mark_task_done_visible,
     add_task,
@@ -768,6 +769,10 @@ async def handle_job_logic(user_id, fname, formula, message):
         except Exception:
             await message.reply_text("❌ Không lưu được thay đổi của việc.", parse_mode='Markdown')
             return True
+        refreshed = ensure_job_schema(updated, "jviec")
+        if 1 <= int(parts[1]) <= len(refreshed):
+            row_text = _task_row_summary(refreshed.iloc[int(parts[1]) - 1], int(parts[1]))
+            await message.reply_text(f"✅ Đã cập nhật:\n{row_text}", parse_mode='Markdown')
         await message.reply_text(format_task_list(updated, only_open=True), parse_mode='Markdown')
         return True
 

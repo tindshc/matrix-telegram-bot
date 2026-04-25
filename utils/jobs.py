@@ -401,6 +401,32 @@ def _task_row_display(row, row_number):
     return label
 
 
+def _task_row_summary(row, row_number):
+    han = str(row.get("han", "")).strip()
+    viec = str(row.get("viec", "")).strip()
+    phong = str(row.get("phong", "")).strip()
+    diadiem = str(row.get("diadiem", "")).strip()
+    nguoi = str(row.get("nguoi", "")).strip()
+    trangthai = str(row.get("trangthai", "")).strip() or "chờ"
+    ghichu = str(row.get("ghichu", "")).strip()
+
+    parts = [f"{row_number}. {viec}"]
+    if han:
+        parts.append(han)
+    if phong:
+        parts.append(phong)
+    if diadiem:
+        parts.append(diadiem)
+    if nguoi:
+        parts.append(nguoi)
+    if trangthai:
+        parts.append(trangthai)
+    text = " | ".join(parts)
+    if ghichu:
+        text += f"\n  - {ghichu}"
+    return text
+
+
 def format_task_list(df, only_open=True):
     work_df = _ordered_task_df(df, only_open=only_open)
 
