@@ -37,8 +37,8 @@ from utils.jobs import (
     parse_job_task_payload,
     parse_job_roster_payload,
     parse_job_date_text,
-    roster_roles,
-    roster_roles_for_department,
+    roster_members,
+    roster_members_for_department,
     roster_departments,
     JOB_KIND,
 )
@@ -137,7 +137,7 @@ def _csv_input_prompt(df, field_name, position, total):
 
 def _job_input_fields(fname, department=None):
     if job_file_type(fname) == "roster":
-        return ["vai_tro", "ten"] if department else ["phong", "vai_tro", "ten"]
+        return ["ten"] if department else ["phong", "ten"]
     return ["han", "viec", "phong", "diadiem", "nguoi", "ghichu"]
 
 
@@ -146,13 +146,6 @@ def _job_input_prompt(fname, df, field_name, position, total, department=None, s
     kind = job_file_type(fname)
 
     if kind == "roster":
-        if field_name == "vai_tro":
-            roles = roster_roles_for_department(df, department)
-            lines.append("Chọn vai trò hoặc gõ giá trị mới:")
-            for idx, role in enumerate(roles, 1):
-                lines.append(f"{idx}. {role}")
-            lines.append("Gõ /back để quay lại bước trước, /cancel để hủy.")
-            return "\n".join(lines)
         if field_name == "phong":
             depts = selection_options or roster_departments(df)
             lines.append("Chọn phòng hoặc gõ phòng mới:")
@@ -160,7 +153,7 @@ def _job_input_prompt(fname, df, field_name, position, total, department=None, s
                 lines.append(f"{idx}. {dept}")
             lines.append("Gõ /back để quay lại bước trước, /cancel để hủy.")
             return "\n".join(lines)
-        lines.append("Nhập tên nhân sự.")
+        lines.append("Nhập tên ngắn, ví dụ: `ld`, `ngamy`, `congtin`.")
         lines.append("Gõ /back để quay lại bước trước, /cancel để hủy.")
         return "\n".join(lines)
 
@@ -188,7 +181,7 @@ def _job_input_prompt(fname, df, field_name, position, total, department=None, s
             for idx, value in enumerate(options, 1):
                 lines.append(f"{idx}. {value}")
         else:
-            lines.append("Nhập người phụ trách hoặc danh sách ngắn, ví dụ: `lđ,tin`.")
+            lines.append("Nhập người phụ trách hoặc danh sách ngắn, ví dụ: `ld`, `ngamy`, `congtin`.")
         lines.append("Gõ /back để quay lại bước trước, /cancel để hủy.")
         return "\n".join(lines)
 
@@ -236,11 +229,11 @@ async def _load_job_roster_dataframe(user_id):
     return ensure_job_schema(df, "jphong")
 
 
-async def _job_role_options(user_id, department=None):
+async def _job_member_options(user_id, department=None):
     df = await _load_job_roster_dataframe(user_id)
     if df is None:
-        return ["lđ", "tin"]
-    return roster_roles_for_department(df, department)
+        return ["ld", "ngamy", "congtin"]
+    return roster_members_for_department(df, department)
 
 
 async def _job_department_options(user_id):
@@ -466,7 +459,7 @@ async def _start_job_input_session(user_id, fname, message, department=None):
     await message.reply_text(job_help_text(fname))
     selection_options = None
     if fields[0] == "nguoi":
-        selection_options = await _job_role_options(user_id, department)
+        selection_options = await _job_member_options(user_id, department)
     elif fields[0] == "phong":
         selection_options = await _job_department_options(user_id)
     await message.reply_text(_job_input_prompt(fname, df, fields[0], 1, len(fields), department=department, selection_options=selection_options))
@@ -516,7 +509,7 @@ async def _continue_job_input_session(user_id, text, message):
         await message.reply_text(f"↩️ Đã quay lại bước `{prev_field}`.", parse_mode='Markdown')
         selection_options = None
         if prev_field == "nguoi":
-            selection_options = await _job_role_options(user_id, current_department)
+            selection_options = await _job_member_options(user_id, current_department)
         elif prev_field == "phong":
             selection_options = await _job_department_options(user_id)
         await message.reply_text(_job_input_prompt(fname, df, prev_field, current_index + 1, len(fields), department=current_department, selection_options=selection_options))
@@ -540,20 +533,9 @@ async def _continue_job_input_session(user_id, text, message):
     value = answer
 
     if job_file_type(fname) == "roster":
-        roles = roster_roles_for_department(df, department)
-        if field_name == "vai_tro":
-            if answer.isdigit():
-                role_index = int(answer) - 1
-                if 0 <= role_index < len(roles):
-                    value = roles[role_index]
-            elif answer.strip().lower() in {"1", "lđ", "ld"}:
-                value = "lđ"
-            elif answer.strip().lower() in {"2", "tin"}:
-                value = "tin"
-        else:
-            parsed = parse_job_roster_payload("ten=" + answer, roles=roles, department=department)
-            if parsed and parsed.get("ten"):
-                value = parsed["ten"]
+        parsed = parse_job_roster_payload("ten=" + answer, department=department)
+        if parsed and parsed.get("ten"):
+            value = parsed["ten"]
     else:
         if field_name == "han":
             parsed_date = parse_job_date_text(answer)
@@ -571,7 +553,7 @@ async def _continue_job_input_session(user_id, text, message):
         elif field_name == "diadiem":
             value = answer
         elif field_name == "nguoi":
-            selection_options = await _job_role_options(user_id, department)
+            selection_options = await _job_member_options(user_id, department)
             value = _parse_multi_selection(answer, selection_options)
 
     values[field_name] = value
@@ -587,14 +569,14 @@ async def _continue_job_input_session(user_id, text, message):
         current_department = state.get("department") or values.get("phong")
         selection_options = None
         if next_field == "nguoi":
-            selection_options = await _job_role_options(user_id, current_department)
+            selection_options = await _job_member_options(user_id, current_department)
         elif next_field == "phong":
             selection_options = await _job_department_options(user_id)
         await message.reply_text(_job_input_prompt(fname, df, next_field, state["index"] + 1, len(fields), department=current_department, selection_options=selection_options))
         return True
 
     if job_file_type(fname) == "roster":
-        row_data = parse_job_roster_payload("vai_tro=" + str(values.get("vai_tro", "")) + " ten=" + str(values.get("ten", "")), roles=roster_roles_for_department(df, department), department=department)
+        row_data = parse_job_roster_payload("ten=" + str(values.get("ten", "")), department=department)
         if not row_data:
             db_delete_state(user_id, _job_state_key(""))
             await message.reply_text("❌ Không thêm được nhân sự.")
@@ -661,7 +643,7 @@ async def handle_job_logic(user_id, fname, formula, message):
                 return True
             if payload.lower() == "gui":
                 return await _start_job_input_session(user_id, fname, message, department=department)
-            row_data = parse_job_roster_payload(payload, roles=roster_roles_for_department(df, department), department=department)
+            row_data = parse_job_roster_payload(payload, department=department)
             if not row_data:
                 await message.reply_text("❌ Dữ liệu nhập nhân sự không hợp lệ.")
                 return True
@@ -877,7 +859,7 @@ async def webhook_handler(request: Request):
             
             if query.data == 'mode_help':
                 await query.edit_message_text(
-                    "ℹ️ **Hướng dẫn tính năng**\n\n- Upload CSV để nạp file, ví dụ `bctk.csv`.\n- CSV dùng lệnh: `tên_file hien`, `tên_file hien muc`, `tên_file cachnhap`, `tên_file nhap 1=1 2=1 3=15,5 4=Sương nộp` hoặc `tên_file nhap 1 1 15,5 Sương nộp`, `tên_file nhap gui`, `tên_file tim ...`, `tên_file xem ...`, `tên_file xoa`.\n- Dùng `/list` để xem danh sách file CSV, `/listmd` để xem danh sách file Markdown, `/listj` để xem file việc.\n- Ánh xạ số nhập: `1=muc`, `2=thuchi`, `3=sotien`, `4=noidung`.\n- Với file có cột `muc`, `thuchi`, `sotien`, ba trường này là bắt buộc khi `nhap`.\n- Dạng ngắn của `nhap` sẽ đi theo thứ tự cột thật của file, ví dụ `muc thuchi sotien noidung`.\n- Khi `nhap gui`, bạn có thể gõ `/back` để quay lại bước trước và sửa giá trị.\n- File việc dùng tiền tố `j`, ví dụ `jviec` và `jphong`.\n- `jviec` là nhánh giao việc: `jviec giao 28/4 Báo cáo ctv ds`, `jviec giao am 10/3 Chạp mã nhà thờ lớn gd`, `jviec hien`, `jviec xem 1`, `jviec xong 1`.\n- Ở bước `nguoi` của `jviec nhap gui`, bot sẽ hiện danh sách từ `jphong` của phòng đó và cho nhập nhiều số như `1,2`.\n- `jphong` là sổ nhân sự chung theo phòng: `jphong ds hien`, `jphong ds nhap 1 Nguyễn Văn A`, `jphong ds nhap gui`.\n- Markdown dùng tên có chữ `md` trong tên, ví dụ `mdquytrinh.md` hoặc `luatmd.doc.md`.\n- Markdown dùng `tên_file hien` hoặc `tên_file hien 1` để xem mục lục, ví dụ `mdphongtuc hien` sẽ hiện các chủ đề lớn; `tên_file xem 1 1` hoặc `tên_file xem 1 1 1` để xem toàn bộ chi tiết của nhánh đó, `tên_file xoa 2` để xóa mục theo số thứ tự, `tên_file them file.md` để gộp file.\n- Lịch âm dương dùng `callicham 10/3/2026` hoặc `callicham am 10/3/2026`.\n- Quản lý file: `/list`, `/listmd`, `/listj`, `/del <tên_file>`.\n\nVí dụ: `bctk tim 5~'hoacuong' and 1==2020`",
+                    "ℹ️ **Hướng dẫn tính năng**\n\n- Upload CSV để nạp file, ví dụ `bctk.csv`.\n- CSV dùng lệnh: `tên_file hien`, `tên_file hien muc`, `tên_file cachnhap`, `tên_file nhap 1=1 2=1 3=15,5 4=Sương nộp` hoặc `tên_file nhap 1 1 15,5 Sương nộp`, `tên_file nhap gui`, `tên_file tim ...`, `tên_file xem ...`, `tên_file xoa`.\n- Dùng `/list` để xem danh sách file CSV, `/listmd` để xem danh sách file Markdown, `/listj` để xem file việc.\n- Ánh xạ số nhập: `1=muc`, `2=thuchi`, `3=sotien`, `4=noidung`.\n- Với file có cột `muc`, `thuchi`, `sotien`, ba trường này là bắt buộc khi `nhap`.\n- Dạng ngắn của `nhap` sẽ đi theo thứ tự cột thật của file, ví dụ `muc thuchi sotien noidung`.\n- Khi `nhap gui`, bạn có thể gõ `/back` để quay lại bước trước và sửa giá trị.\n- File việc dùng tiền tố `j`, ví dụ `jviec` và `jphong`.\n- `jviec` là nhánh giao việc: `jviec giao 28/4 Báo cáo ctv ds`, `jviec giao am 10/3 Chạp mã nhà thờ lớn gd`, `jviec hien`, `jviec xem 1`, `jviec xong 1`.\n- Ở bước `nguoi` của `jviec nhap gui`, bot sẽ hiện danh sách tên từ `jphong` của phòng đó và cho nhập nhiều số như `1,2`.\n- `jphong` là sổ tên chung theo phòng: `jphong ds hien`, `jphong ds nhap ld`, `jphong ds nhap gui`.\n- `ld` chỉ là một tên bình thường trong sổ, không phải vai trò riêng.\n- Markdown dùng tên có chữ `md` trong tên, ví dụ `mdquytrinh.md` hoặc `luatmd.doc.md`.\n- Markdown dùng `tên_file hien` hoặc `tên_file hien 1` để xem mục lục, ví dụ `mdphongtuc hien` sẽ hiện các chủ đề lớn; `tên_file xem 1 1` hoặc `tên_file xem 1 1 1` để xem toàn bộ chi tiết của nhánh đó, `tên_file xoa 2` để xóa mục theo số thứ tự, `tên_file them file.md` để gộp file.\n- Lịch âm dương dùng `callicham 10/3/2026` hoặc `callicham am 10/3/2026`.\n- Quản lý file: `/list`, `/listmd`, `/listj`, `/del <tên_file>`.\n\nVí dụ: `bctk tim 5~'hoacuong' and 1==2020`",
                     parse_mode='Markdown'
                 )
             elif query.data == 'mode_list':

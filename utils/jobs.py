@@ -8,8 +8,7 @@ from utils.calendar import SolarAndLunar
 from utils.matrix import _format_row_vertical
 
 TASK_COLUMNS = ["id", "han", "viec", "phong", "diadiem", "nguoi", "trangthai", "ghichu"]
-ROSTER_COLUMNS = ["id", "phong", "vai_tro", "ten"]
-DEFAULT_ROLES = ["lđ", "tin"]
+ROSTER_COLUMNS = ["id", "phong", "ten"]
 JOB_KIND = "job"
 
 
@@ -126,9 +125,8 @@ def parse_job_task_payload(payload: str, known_depts=None):
     return data, viec
 
 
-def parse_job_roster_payload(payload: str, roles=None, department=None):
+def parse_job_roster_payload(payload: str, department=None):
     text = str(payload).strip()
-    roles = roles or DEFAULT_ROLES
     if not text:
         return None
 
@@ -151,10 +149,7 @@ def parse_job_roster_payload(payload: str, roles=None, department=None):
             result["phong"] = department
         elif "phong" in named:
             result["phong"] = named.get("phong", "").strip()
-        role_value = named.get("vai_tro") or named.get("role") or named.get("vt")
-        name_value = named.get("ten") or named.get("name")
-        if role_value:
-            result["vai_tro"] = _normalize_role(role_value, roles)
+        name_value = named.get("ten") or named.get("name") or named.get("tennguoi")
         if name_value:
             result["ten"] = name_value
         return result if result else None
@@ -165,39 +160,14 @@ def parse_job_roster_payload(payload: str, roles=None, department=None):
 
     first = tokens[0].strip()
     rest = tokens[1].strip() if len(tokens) > 1 else ""
-    if first.isdigit():
-        index = int(first) - 1
-        if 0 <= index < len(roles):
-            first = roles[index]
-    elif first.lower() in {"1", "lđ", "ld"}:
-        first = "lđ"
-    elif first.lower() in {"2", "tin"}:
-        first = "tin"
-
     if rest:
-        result = {"vai_tro": first, "ten": rest}
-        if department:
-            result["phong"] = department
+        result = {"phong": department or first, "ten": rest}
         return result
 
     result = {"ten": first}
     if department:
         result["phong"] = department
     return result
-
-
-def _normalize_role(value: str, roles=None):
-    roles = roles or DEFAULT_ROLES
-    raw = str(value).strip().lower()
-    if raw.isdigit():
-        index = int(raw) - 1
-        if 0 <= index < len(roles):
-            return roles[index]
-    if raw in {"1", "lđ", "ld"}:
-        return "lđ"
-    if raw in {"2", "tin"}:
-        return "tin"
-    return value.strip()
 
 
 def _append_row(df, row_data):
@@ -216,13 +186,13 @@ def job_help_text(fname: str):
         return "\n".join(
             [
                 "📝 **Cách dùng jphong**:",
-                "- `jphong ds hien` để xem danh sách vai trò / nhân sự của phòng ds.",
+                "- `jphong ds hien` để xem danh sách tên của phòng ds.",
                 "- `jphong gd hien` để xem danh sách của phòng gd.",
-                "- `jphong ds nhap 1 Nguyễn Văn A` hoặc `jphong ds nhap vai_tro=lđ ten=Nguyễn Văn A` để thêm người.",
-                "- `jphong ds nhap gui` để bot hỏi lần lượt vai trò rồi tên.",
+                "- `jphong ds nhap ngamy` hoặc `jphong ds nhap ten=ngamy` để thêm người.",
+                "- `jphong ds nhap gui` để bot hỏi phòng rồi tên.",
                 "- `/back` để quay lại bước trước, `/cancel` để hủy.",
                 "- Dữ liệu được lưu chung trong một file `jphong`, phân biệt theo cột `phong`.",
-                "- Mặc định có 2 vai trò: `lđ` và `tin`.",
+                "- `ld` chỉ là một tên đặc biệt trong danh sách, không phải vai trò riêng.",
             ]
         )
 
@@ -379,34 +349,10 @@ def format_roster_summary(df, department=None):
             continue
         lines.append("")
         lines.append(f"**Phòng {dept}**")
-        roles = DEFAULT_ROLES[:]
-        extra_roles = [r for r in _unique_roles(dept_df["vai_tro"]) if r not in roles]
-        roles.extend(extra_roles)
-        for idx, role in enumerate(roles, 1):
-            role_names = _names_for_role(dept_df, role)
-            if not role_names:
-                continue
-            lines.append(f"{idx}. {role}")
-            for name_idx, name in enumerate(role_names, 1):
-                lines.append(f"  - {name_idx}. {name}")
+        members = roster_members_for_department(dept_df, None)
+        for idx, name in enumerate(members, 1):
+            lines.append(f"{idx}. {name}")
     return "\n".join(lines)
-
-
-def _unique_roles(series):
-    values = []
-    seen = set()
-    for item in series.tolist():
-        text = str(item).strip()
-        if not text or text in seen:
-            continue
-        seen.add(text)
-        values.append(text)
-    return values
-
-
-def _names_for_role(df, role):
-    subset = df[df["vai_tro"].astype(str).str.strip().str.lower() == str(role).strip().lower()]
-    return [str(v).strip() for v in subset["ten"].tolist() if str(v).strip()]
 
 
 def add_roster_entry(df, data):
@@ -415,24 +361,34 @@ def add_roster_entry(df, data):
     if "id" in row:
         row["id"] = _auto_increment_id(work_df)
     row["phong"] = data.get("phong", "")
-    row["vai_tro"] = data.get("vai_tro", "")
     row["ten"] = data.get("ten", "")
     return pd.concat([work_df, pd.DataFrame([row])], ignore_index=True)
 
 
-def roster_roles(df):
+def roster_members(df):
     work_df = ensure_job_schema(df, "jphong")
-    roles = _unique_roles(work_df["vai_tro"]) if not work_df.empty else []
-    merged = []
-    for role in DEFAULT_ROLES + roles:
-        if role and role not in merged:
-            merged.append(role)
-    return merged
+    values = []
+    seen = set()
+    for item in work_df["ten"].tolist():
+        text = str(item).strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        values.append(text)
+    return values
 
 
-def roster_roles_for_department(df, department=None):
-    return roster_roles(_filter_roster_df(df, department))
+def roster_members_for_department(df, department=None):
+    return roster_members(_filter_roster_df(df, department))
 
 
 def roster_departments(df):
     return _roster_departments(df)
+
+
+def roster_roles(df):
+    return roster_members(df)
+
+
+def roster_roles_for_department(df, department=None):
+    return roster_members_for_department(df, department)
