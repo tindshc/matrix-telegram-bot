@@ -351,6 +351,17 @@ async def _continue_csv_input_session(user_id, text, message):
         db_delete_state(user_id, _csv_input_state_key(""))
         return False
 
+    file_id = db_get(user_id, fname)
+    if not file_id:
+        db_delete_state(user_id, _csv_input_state_key(""))
+        await message.reply_text(f"❌ Không tìm thấy file `{fname}` trong bộ nhớ.", parse_mode='Markdown')
+        return True
+
+    file = await bot.get_file(file_id)
+    content = requests.get(file.file_path).content.decode('utf-8')
+    df = pd.read_csv(io.StringIO(content), engine='python')
+    fields = _csv_input_fields(df)
+
     answer = text.strip()
     if answer.lower() in {"/cancel", "cancel", "huy", "hủy"}:
         db_delete_state(user_id, _csv_input_state_key(""))
@@ -374,16 +385,6 @@ async def _continue_csv_input_session(user_id, text, message):
         await message.reply_text(_csv_input_prompt(df, prev_field, current_index + 1, len(fields)))
         return True
 
-    file_id = db_get(user_id, fname)
-    if not file_id:
-        db_delete_state(user_id, _csv_input_state_key(""))
-        await message.reply_text(f"❌ Không tìm thấy file `{fname}` trong bộ nhớ.", parse_mode='Markdown')
-        return True
-
-    file = await bot.get_file(file_id)
-    content = requests.get(file.file_path).content.decode('utf-8')
-    df = pd.read_csv(io.StringIO(content), engine='python')
-    fields = _csv_input_fields(df)
     index = int(state.get("index", 0))
     values = state.get("values", {})
 
