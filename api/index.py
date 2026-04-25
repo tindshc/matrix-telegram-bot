@@ -3,6 +3,7 @@ import requests
 import io
 import json
 import re
+import traceback
 import pandas as pd
 from fastapi import FastAPI, Request
 from telegram import Update, Bot, InlineKeyboardButton, InlineKeyboardMarkup
@@ -1016,7 +1017,8 @@ async def webhook_handler(request: Request):
                         handled = await handle_job_logic(user_id, job_fname, job_formula, message)
                     except Exception as exc:
                         if re.match(r"^x(?:ong|oa)\s+\d+$", job_formula.lower()):
-                            await message.reply_text(f"lỗi: `{type(exc).__name__}`", parse_mode='Markdown')
+                            tb = traceback.format_exc(limit=2)
+                            await message.reply_text(f"lỗi: `{type(exc).__name__}`\n`{str(exc)}`\n```{tb}```", parse_mode='Markdown')
                         else:
                             raise
                         return {"status": "ok"}
