@@ -524,6 +524,14 @@ async def _continue_job_input_session(user_id, text, message):
     values = state.get("values", {})
     department = state.get("department") or values.get("phong")
     fields = _job_input_fields(fname, department=department)
+    filled_index = 0
+    for field in fields:
+        if str(values.get(field, "")).strip():
+            filled_index += 1
+        else:
+            break
+    if index < filled_index:
+        index = filled_index
     if index >= len(fields):
         db_delete_state(user_id, _job_state_key(""))
         return False
