@@ -7,7 +7,7 @@ import pandas as pd
 from utils.calendar import SolarAndLunar
 from utils.matrix import _format_row_vertical
 
-TASK_COLUMNS = ["id", "han", "viec", "phong", "nguoi", "trangthai", "ghichu"]
+TASK_COLUMNS = ["id", "han", "viec", "phong", "diadiem", "nguoi", "trangthai", "ghichu"]
 ROSTER_COLUMNS = ["id", "phong", "vai_tro", "ten"]
 DEFAULT_ROLES = ["lđ", "tin"]
 JOB_KIND = "job"
@@ -234,6 +234,7 @@ def job_help_text(fname: str):
             "- `jviec hien` để xem các việc đang chờ.",
             "- `jviec xem` để xem toàn bộ, `jviec xem 1` để xem chi tiết việc số 1.",
             "- `jviec xong 1` để đánh dấu xong.",
+            "- `jviec nhap gui` có cột `diadiem` trước `nguoi`; nếu không có địa điểm thì gõ `-` hoặc `/skip`.",
             "- `jviec nhap gui` để bot hỏi từng trường; ở bước `nguoi`, bot sẽ hiện danh sách từ `jphong` của phòng đó và cho chọn nhiều số như `1,2`.",
             "- `/back` để quay lại bước trước, `/cancel` để hủy.",
             "- File `jviec` lưu theo CSV riêng, tách khỏi CSV thường và Markdown.",
@@ -245,6 +246,7 @@ def _task_row_display(row, row_number):
     han = str(row.get("han", "")).strip()
     viec = str(row.get("viec", "")).strip()
     phong = str(row.get("phong", "")).strip()
+    diadiem = str(row.get("diadiem", "")).strip()
     nguoi = str(row.get("nguoi", "")).strip()
     trangthai = str(row.get("trangthai", "")).strip() or "chờ"
     ghichu = str(row.get("ghichu", "")).strip()
@@ -255,6 +257,8 @@ def _task_row_display(row, row_number):
         parts.append(han)
     if phong:
         parts.append(phong)
+    if diadiem:
+        parts.append(diadiem)
     if nguoi:
         parts.append(nguoi)
     if trangthai:
@@ -349,6 +353,7 @@ def add_task(df, data):
     row["han"] = data.get("han", "")
     row["viec"] = data.get("viec", "")
     row["phong"] = data.get("phong", "")
+    row["diadiem"] = data.get("diadiem", "")
     row["nguoi"] = data.get("nguoi", "")
     row["trangthai"] = data.get("trangthai", "chờ")
     row["ghichu"] = data.get("ghichu", "")

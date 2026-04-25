@@ -138,7 +138,7 @@ def _csv_input_prompt(df, field_name, position, total):
 def _job_input_fields(fname, department=None):
     if job_file_type(fname) == "roster":
         return ["vai_tro", "ten"] if department else ["phong", "vai_tro", "ten"]
-    return ["han", "viec", "phong", "nguoi", "ghichu"]
+    return ["han", "viec", "phong", "diadiem", "nguoi", "ghichu"]
 
 
 def _job_input_prompt(fname, df, field_name, position, total, department=None, selection_options=None):
@@ -167,6 +167,12 @@ def _job_input_prompt(fname, df, field_name, position, total, department=None, s
     if field_name == "han":
         lines.append("Nhập ngày, ví dụ: `28/4` hoặc `28/4/2026`.")
         lines.append("Nếu là âm lịch, gõ `am 10/3` hoặc `am 10/3/2026`.")
+        lines.append("Gõ /back để quay lại bước trước, /cancel để hủy.")
+        return "\n".join(lines)
+
+    if field_name == "diadiem":
+        lines.append("Nhập địa điểm họp, ví dụ: `UBND phường`, hoặc để trống nếu không có.")
+        lines.append("Gõ `-` hoặc `/skip` để bỏ qua.")
         lines.append("Gõ /back để quay lại bước trước, /cancel để hủy.")
         return "\n".join(lines)
 
@@ -489,6 +495,9 @@ async def _continue_job_input_session(user_id, text, message):
         await message.reply_text(f"🛑 Đã hủy nhập cho file `{fname}`.", parse_mode='Markdown')
         return True
 
+    if answer.lower() in {"/skip", "skip", "-", "boqua", "bo qua", "bỏ qua"}:
+        answer = ""
+
     if answer.lower() in {"/back", "back", "quaylai", "quay lại"}:
         current_index = int(state.get("index", 0))
         if current_index <= 0:
@@ -559,6 +568,8 @@ async def _continue_job_input_session(user_id, text, message):
                 dept_index = int(answer) - 1
                 if 0 <= dept_index < len(depts):
                     value = depts[dept_index]
+        elif field_name == "diadiem":
+            value = answer
         elif field_name == "nguoi":
             selection_options = await _job_role_options(user_id, department)
             value = _parse_multi_selection(answer, selection_options)
