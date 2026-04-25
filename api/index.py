@@ -34,6 +34,7 @@ from utils.jobs import (
     add_task,
     format_roster_summary,
     add_roster_entry,
+    delete_task_visible,
     parse_job_task_payload,
     parse_job_roster_payload,
     parse_job_roster_bulk_payload,
@@ -758,6 +759,19 @@ async def handle_job_logic(user_id, fname, formula, message):
             await message.reply_text("❌ Dùng đúng dạng `xong 1`.", parse_mode='Markdown')
             return True
         updated, error = mark_task_done_visible(df, int(parts[1]), only_open=True)
+        if error:
+            await message.reply_text(error, parse_mode='Markdown')
+            return True
+        await _save_dataframe_file(user_id, fname, updated, message, JOB_KIND, "📂 Đã lưu bản cập nhật của")
+        await message.reply_text(format_task_list(updated, only_open=True), parse_mode='Markdown')
+        return True
+
+    if formula_lower.startswith("xoa "):
+        parts = formula.split()
+        if len(parts) != 2 or not parts[1].isdigit():
+            await message.reply_text("❌ Dùng đúng dạng `xoa 1`.", parse_mode='Markdown')
+            return True
+        updated, error = delete_task_visible(df, int(parts[1]), only_open=True)
         if error:
             await message.reply_text(error, parse_mode='Markdown')
             return True

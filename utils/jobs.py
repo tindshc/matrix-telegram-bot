@@ -262,6 +262,7 @@ def job_help_text(fname: str):
             "- `jviec hien` để xem các việc đang chờ.",
             "- `jviec xem` để xem toàn bộ, `jviec xem 1` để xem chi tiết việc số 1.",
             "- `jviec xong 1` để đánh dấu xong.",
+            "- `jviec xoa 1` để xóa việc số 1.",
             "- `jviec nhap gui` là nhập từng bước; có cột `diadiem` trước `nguoi`, nếu không có địa điểm thì gõ `-` hoặc `/skip`.",
             "- Ở bước `phong`, gõ thẳng `ds`, `gd`...; ở bước `nguoi`, bot sẽ hiện danh sách từ `jphong` của phòng đó và cho chọn nhiều số như `1,2`.",
             "- `/back` để quay lại bước trước, `/cancel` để hủy.",
@@ -371,6 +372,21 @@ def mark_task_done_visible(df, visible_number, only_open=True):
         stamp = datetime.now().strftime("%d/%m/%Y")
         work_df.loc[row_idx, "ghichu"] = f"{note} | xong {stamp}".strip(" |")
     return work_df, None
+
+
+def delete_task_visible(df, visible_number, only_open=True):
+    work_df = ensure_job_schema(df, "jviec")
+    if only_open and "trangthai" in work_df.columns:
+        open_mask = work_df["trangthai"].astype(str).str.lower().ne("done")
+        visible_indices = list(work_df[open_mask].index)
+    else:
+        visible_indices = list(work_df.index)
+
+    if visible_number < 1 or visible_number > len(visible_indices):
+        return None, "❌ Số việc không hợp lệ."
+
+    row_idx = visible_indices[visible_number - 1]
+    return work_df.drop(index=row_idx).reset_index(drop=True), None
 
 
 def add_task(df, data):
