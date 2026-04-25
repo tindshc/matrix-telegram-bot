@@ -69,6 +69,26 @@ def _format_selection_help(df, column_name, field_number):
     return "\n".join(lines)
 
 
+def _format_csv_input_help(df):
+    lines = [
+        "📝 **Cách nhập CSV**:",
+        "- `nhap 1=1 2=1 3=15,5 4=Sương nộp`",
+        "- `nhap 1 1 15,5 Sương nộp`",
+        "- `id` sẽ tự tăng nếu cột này có trong file.",
+        "- `1` là `muc`, `2` là `thuchi`, `3` là `sotien`, `4` là `noidung`.",
+        "- Với `muc` và `thuchi`, nhập số thứ tự trong danh sách để chọn; nếu số đó không có thì bot lấy nguyên giá trị bạn gõ.",
+        "- Với file có cột `muc`, `thuchi`, `sotien`, ba trường này là bắt buộc khi `nhap`.",
+        "- Dạng ngắn của `nhap` sẽ đi theo thứ tự cột thật của file, ví dụ `muc thuchi sotien noidung`.",
+    ]
+    if "muc" in {str(c).casefold() for c in df.columns}:
+        lines.append("")
+        lines.append(_format_selection_help(df, _resolve_column_name(list(df.columns), "muc"), 1))
+    if "thuchi" in {str(c).casefold() for c in df.columns}:
+        lines.append("")
+        lines.append(_format_selection_help(df, _resolve_column_name(list(df.columns), "thuchi"), 2))
+    return "\n".join(lines)
+
+
 def _format_unique_value_listing(df, column_name):
     values = _unique_nonempty_values(df[column_name])
     if not values:
@@ -426,23 +446,10 @@ def process_matrix(csv_content, formula):
         if formula_lower.startswith("nhap"):
             raw_args = formula[4:].strip()
             if not raw_args:
-                lines = [
-                    "📝 **Mẫu nhập mới**:",
-                    "- `nhap 1=1 2=1 3=15,5 4=Sương nộp`",
-                    "- `nhap 1 1 15,5 Sương nộp`",
-                    "- `id` sẽ tự tăng nếu cột này có trong file.",
-                    "- `1` là `muc`, `2` là `thuchi`, `3` là `sotien`, `4` là `noidung`.",
-                    "- Với `muc` và `thuchi`, nhập số thứ tự trong danh sách để chọn; nếu số đó không có thì bot lấy nguyên giá trị bạn gõ.",
-                    "- Với file có cột `muc`, `thuchi`, `sotien`, ba trường này là bắt buộc khi `nhap`.",
-                    "- Nếu dùng dạng ngắn, nhập theo thứ tự cột thật của file, ví dụ `muc thuchi sotien noidung`.",
-                ]
-                if "muc" in {str(c).casefold() for c in df.columns}:
-                    lines.append("")
-                    lines.append(_format_selection_help(df, _resolve_column_name(list(df.columns), "muc"), 1))
-                if "thuchi" in {str(c).casefold() for c in df.columns}:
-                    lines.append("")
-                    lines.append(_format_selection_help(df, _resolve_column_name(list(df.columns), "thuchi"), 2))
-                return "\n".join(lines), None
+                return _format_csv_input_help(df), None
+
+            if formula_lower == "cachnhap":
+                return _format_csv_input_help(df), None
 
             row_data = _parse_named_arguments(raw_args)
             if not row_data:
@@ -455,8 +462,10 @@ def process_matrix(csv_content, formula):
                 return error, None
 
             updated_csv = appended.to_csv(index=False)
-            msg = f"✅ Đã thêm dòng mới vào file.\n\n{appended.tail(5).to_markdown(index=False)}"
-            return msg, updated_csv
+            return (
+                f"✅ Đã thêm dòng mới: `{appended.iloc[-1].to_dict()}`",
+                updated_csv,
+            )
 
         if formula_lower.startswith("xem "):
             row_part = formula[4:].strip()
