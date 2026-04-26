@@ -1082,6 +1082,11 @@ async def webhook_handler(request: Request):
                     return {"status": "ok"}
                 if await _continue_job_input_session(user_id, text, message):
                     return {"status": "ok"}
+                
+                # Nếu AI không phân loại được và không phải lệnh cũ, báo cho user biết
+                if intent.get("action") == "UNKNOWN":
+                    await message.reply_text(f"🤖 AI không hiểu ý bạn: `{text}`. Thử lại với câu rõ ràng hơn nhé!")
+                    return {"status": "ok"}
 
             # 2. Handle Matrix (by Name or Reply)
             if text:
