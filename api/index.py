@@ -47,6 +47,11 @@ from utils.jobs import (
     JOB_KIND,
 )
 
+from handlers.ai_handler import parse_user_intent
+from handlers.sheets_handler import append_to_sheet, get_sheet_as_df
+from handlers.drive_handler import save_markdown_to_drive
+from handlers.matrix_handler import handle_matrix_command
+
 # Initialize FastAPI
 app = FastAPI()
 
@@ -1027,6 +1032,53 @@ async def webhook_handler(request: Request):
                         return {"status": "ok"}
 
             if text and not text.startswith("/"):
+                # --- AI INTENT ROUTING (V2) ---
+                intent = parse_user_intent(text)
+                
+                if intent.get("action") == "SPENDING":
+                    sheet_id = os.getenv("DEFAULT_SHEET_ID")
+                    if sheet_id:
+                        success, msg = append_to_sheet(sheet_id, "Spending", {
+                            "Ngày": pd.Timestamp.now().strftime("%d/%m/%Y"),
+                            "Số tiền": intent.get("amount"),
+                            "Hạng mục": intent.get("category"),
+                            "Ghi chú": intent.get("note")
+                        })
+                        await message.reply_text(msg)
+                        return {"status": "ok"}
+                    else:
+                        await message.reply_text("⚠️ Chưa cấu hình DEFAULT_SHEET_ID.")
+
+                elif intent.get("action") == "TASK":
+                    sheet_id = os.getenv("DEFAULT_SHEET_ID")
+                    if sheet_id:
+                        success, msg = append_to_sheet(sheet_id, "Tasks", {
+                            "Hạn": intent.get("due_date"),
+                            "Việc": intent.get("task"),
+                            "Bộ phận": intent.get("department")
+                        })
+                        await message.reply_text(msg)
+                        return {"status": "ok"}
+
+                elif intent.get("action") == "NOTE":
+                    folder_id = os.getenv("DEFAULT_DRIVE_FOLDER_ID")
+                    if folder_id:
+                        filename = f"{pd.Timestamp.now().strftime('%Y-%m-%d')}-{intent.get('title', 'note')}.md"
+                        file_id, msg = save_markdown_to_drive(folder_id, filename, intent.get("content", ""))
+                        await message.reply_text(msg)
+                        return {"status": "ok"}
+                    else:
+                        await message.reply_text("⚠️ Chưa cấu hình DEFAULT_DRIVE_FOLDER_ID.")
+
+                elif intent.get("action") == "MATRIX":
+                    sheet_id = os.getenv("DEFAULT_SHEET_ID")
+                    formula = intent.get("formula")
+                    if sheet_id and formula:
+                        res = await handle_matrix_command(user_id, sheet_id, "Data", formula)
+                        await message.reply_text(res, parse_mode='Markdown')
+                        return {"status": "ok"}
+
+                # --- FALLBACK TO OLD LOGIC ---
                 if await _continue_csv_input_session(user_id, text, message):
                     return {"status": "ok"}
                 if await _continue_job_input_session(user_id, text, message):
