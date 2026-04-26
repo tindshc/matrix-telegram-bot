@@ -1,4 +1,5 @@
 import pandas as pd
+import gspread
 from utils.google_api import get_sheets_client
 
 def append_to_sheet(sheet_id, worksheet_name, data_dict):
