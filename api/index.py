@@ -102,8 +102,8 @@ def _known_job_departments(user_id):
 
 def get_main_menu():
     keyboard = [
-        [InlineKeyboardButton("ℹ️ Hướng dẫn tính năng", callback_data='mode_help')],
-        [InlineKeyboardButton("📋 Danh sách file CSV", callback_data='mode_list')]
+        [InlineKeyboardButton("🤖 Hướng dẫn V2", callback_data='mode_help')],
+        [InlineKeyboardButton("📊 Mở Google Sheets", url=f"https://docs.google.com/spreadsheets/d/{os.getenv('DEFAULT_SHEET_ID')}")]
     ]
     return InlineKeyboardMarkup(keyboard)
 
@@ -922,15 +922,14 @@ async def webhook_handler(request: Request):
             
             if query.data == 'mode_help':
                 help_lines = [
-                    "ℹ️ **Hướng dẫn nhanh**",
+                    "🤖 **MATRIX Assistant V2**",
                     "",
-                    "- CSV: `/list`, `hien`, `tim`, `xem`, `nhap gui`, `nhap`, `tinh`, `sua`, `xoa`.",
-                    "- CSV nhập: `nhap gui` để nhập từng bước, `nhap 1 1 15,5 Sương nộp` để nhập nhanh.",
-                    "- CSV chọn: cột bắt đầu bằng `s` là cột chọn, ví dụ `sgioitinh`.",
-                    "- `jviec`: giao việc, xem việc, xong việc, `cachnhap`, `nhap gui`.",
-                    "- `jphong`: danh sách tên theo phòng; `jphong cachnhap` để xem hướng dẫn.",
-                    "- Markdown: `hien`, `xem`, `tim`, `xoa`, `them`.",
-                    "- `/list` là CSV, `/listmd` là Markdown, `/listj` là file việc.",
+                    "Bạn không cần dùng lệnh phức tạp nữa, hãy chat tự nhiên:",
+                    "- **Chi tiêu:** `Ăn sáng 30k`, `Mua xăng 50k`...",
+                    "- **Công việc:** `Nhắc mình mai họp lúc 9h`, `Việc: Làm báo cáo`...",
+                    "- **Ghi chú (Obsidian):** `Ghi chú: [Tiêu đề] Nội dung...`",
+                    "",
+                    "*Lưu ý: Dữ liệu tự động đồng bộ vào Google Sheets và Drive.*",
                 ]
                 await query.edit_message_text("\n".join(help_lines), parse_mode='Markdown')
             elif query.data == 'mode_list':
