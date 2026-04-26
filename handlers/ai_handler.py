@@ -39,7 +39,9 @@ def parse_user_intent(text):
 
     try:
         model = genai.GenerativeModel('gemini-1.5-flash')
-        response = model.generate_content([SYSTEM_PROMPT, text])
+        # Gộp prompt và text thành một chuỗi duy nhất để AI dễ hiểu ngữ cảnh
+        full_prompt = f"{SYSTEM_PROMPT}\n\nNỘI DUNG CHAT: \"{text}\"\n\nKẾT QUẢ JSON:"
+        response = model.generate_content(full_prompt)
         
         # Extract JSON from response
         res_text = response.text.strip()
